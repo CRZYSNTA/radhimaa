@@ -1,11 +1,10 @@
 """
 =============================================================================
-JARVIS 24/7 Full Backend Cloud Server Engine (Fixed UI Data Parsing & Auth)
+JARVIS 24/7 Full Backend Cloud Server Engine (No-Cache Web Dashboard)
 =============================================================================
 Fixes Applied:
- - Allows Web Console UI requests seamlessly
- - Handles JSON responses safely (data.reply || data.response || data.detail)
- - Prevents 'undefined' text in chat logs
+ - [Cache Fix]: Added Cache-Control headers to prevent browser stale cache.
+ - [Data Fix]: Unified payload handler supporting text/message/reply/response.
 
 Author: Built for beginners (B.Tech CS background)
 =============================================================================
@@ -67,7 +66,7 @@ def get_recent_conversations(limit: int = 10):
 
 init_db()
 
-app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.6")
+app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.7")
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,11 +80,12 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 AUTH_TOKEN = os.environ.get("JARVIS_AUTH_TOKEN", "")
 
 
-class AskQuery(BaseModel):
-    text: str
+class UnifiedQuery(BaseModel):
+    text: str = None
+    message: str = None
 
-class ChatQuery(BaseModel):
-    message: str
+    def get_query(self) -> str:
+        return self.text or self.message or ""
 
 
 def fetch_gemini_ai_response(user_text: str) -> str:
@@ -140,11 +140,10 @@ def process_query_with_memory(user_text: str) -> str:
 
 
 def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
-    """Verifies auth token for remote API calls while allowing Web Console dashboard."""
     client_ip = request.client.host if request.client else ""
     referer = request.headers.get("referer", "")
     
-    # Allow loopback calls or calls originating directly from the built-in web console
+    # Allow loopback calls or calls originating directly from the web console UI
     if client_ip in ["127.0.0.1", "localhost", "::1"] or "onrender.com" in referer:
         return
 
@@ -155,10 +154,10 @@ def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.6"}
+    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.7"}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def get_web_dashboard():
     html_content = """
     <!DOCTYPE html>
@@ -166,6 +165,9 @@ def get_web_dashboard():
     <head>
         <title>JARVIS 24/7 Cloud Console</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
         <style>
             body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; display: flex; justify-content: center; }
             .card { width: 100%; max-width: 550px; background: #1e293b; border: 1px solid #38bdf8; border-radius: 12px; padding: 22px; box-shadow: 0 0 30px rgba(56, 189, 248, 0.35); }
@@ -191,7 +193,7 @@ def get_web_dashboard():
         <script>
             async function loadHistory() {
                 try {
-                    const res = await fetch('/api/history?limit=10');
+                    const res = await fetch('/api/history?limit=10&v=' + Date.now());
                     if (res.ok) {
                         const data = await res.json();
                         (data.history || []).forEach(item => {
@@ -219,7 +221,7 @@ def get_web_dashboard():
                             'Content-Type': 'application/json',
                             'X-JARVIS-Token': 'jarvis_secret_key_777'
                         },
-                        body: JSON.stringify({text: text})
+                        body: JSON.stringify({text: text, message: text})
                     });
                     const data = await res.json();
                     const reply = data.reply || data.response || data.detail || 'No response';
@@ -240,21 +242,28 @@ def get_web_dashboard():
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(
+        content=html_content,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 @app.post("/ask")
-def ask_endpoint(payload: AskQuery, request: Request, x_jarvis_token: str = Header(None)):
+def ask_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str = Header(None)):
     verify_auth(request, x_jarvis_token)
-    reply = process_query_with_memory(payload.text)
-    return {"reply": reply}
+    reply = process_query_with_memory(payload.get_query())
+    return {"reply": reply, "response": reply}
 
 
 @app.post("/api/chat")
-def chat_endpoint(query: ChatQuery, request: Request, x_jarvis_token: str = Header(None)):
+def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str = Header(None)):
     verify_auth(request, x_jarvis_token)
-    reply = process_query_with_memory(query.message)
-    return {"response": reply}
+    reply = process_query_with_memory(payload.get_query())
+    return {"reply": reply, "response": reply}
 
 
 @app.get("/api/history")
