@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: jarvis-ai-assistant
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: JARVIS_AUTH_TOKEN
+        sync: false

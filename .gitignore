@@ -1,0 +1,8 @@
+# Security & Privacy: Ignore secrets, database, binaries
+config.json
+jarvis_memory.db
+cloudflared.exe
+*.task
+*.mp3
+__pycache__/
+.env

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS Ripple Study Overlay</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: rgba(10, 15, 30, 0.85);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e2e8f0;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        #hud-badge {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #38bdf8;
+            border-radius: 30px;
+            padding: 10px 28px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+            pointer-events: none;
+            z-index: 10;
+        }
+        .status-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 12px #38bdf8;
+            animation: pulse 2s infinite;
+        }
+        .status-text {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #38bdf8;
+            text-transform: uppercase;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
+            70% { transform: scale(1.15); box-shadow: 0 0 0 12px rgba(56, 189, 248, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="ripple-canvas"></canvas>
+        <div id="hud-badge">
+            <div class="status-dot" id="status-dot"></div>
+            <div class="status-text" id="status-text">JARVIS Active (Click or Say "Jarvis")</div>
+        </div>
+    </div>
+
+    <script>
+        const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789=?#§¶△◊×÷%@&*/<>+-$¥£~^|:;.,()[]{}";
+        const canvas = document.getElementById('ripple-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        let rings = [];
+        let clock = 0;
+        let lastTime = performance.now();
+
+        function rng(seed) {
+            let s = seed >>> 0;
+            return function() {
+                s ^= s << 13; s >>>= 0;
+                s ^= s >> 17;
+                s ^= s << 5; s >>>= 0;
+                return s / 4294967296;
+            };
+        }
+
+        const N = 28;
+        let glyphs = new Array(N * N);
+        const rand = rng(20260809);
+        for (let i = 0; i < N * N; i++) {
+            glyphs[i] = CHARS.charAt(Math.floor(rand() * CHARS.length));
+        }
+
+        function emit(x, y) {
+            rings.push({ x, y, t: clock });
+            if (rings.length > 10) rings.shift();
+        }
+
+        let autoAcc = 0;
+        const autoRng = rng(880219);
+        let accentRGB = [56, 189, 248];
+
+        function setStatus(text, colorHex, rgbArray) {
+            statusText.innerText = text;
+            statusText.style.color = colorHex;
+            statusDot.style.background = colorHex;
+            statusDot.style.boxShadow = `0 0 14px ${colorHex}`;
+            accentRGB = rgbArray;
+        }
+
+        function render(now) {
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+            clock += dt;
+
+            ctx.clearRect(0, 0, width, height);
+
+            autoAcc += dt * 0.5;
+            if (autoAcc >= 2.0) {
+                autoAcc -= 2.0;
+                emit(autoRng() * width, autoRng() * height);
+            }
+
+            while (rings.length && clock - rings[0].t > 1.8) {
+                rings.shift();
+            }
+
+            const cell = (Math.min(width, height) / N) * 0.9;
+            const fs = cell * 1.1;
+            const x0 = width / 2 - (cell * (N - 1)) / 2;
+            const y0 = height / 2 - (cell * (N - 1)) / 2;
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = `${fs.toFixed(1)}px "Courier New", Courier, monospace`;
+
+            for (let gy = 0; gy < N; gy++) {
+                const py = y0 + gy * cell;
+                for (let gx = 0; gx < N; gx++) {
+                    const px = x0 + gx * cell;
+                    let val = 0;
+
+                    for (let k = 0; k < rings.length; k++) {
+                        const R = rings[k];
+                        const age = clock - R.t;
+                        if (age < 0) continue;
+                        const rad = width * 0.8 * age;
+                        const dx = px - R.x;
+                        const dy = py - R.y;
+                        const d = Math.sqrt(dx * dx + dy * dy);
+                        let q = (d - rad) / (cell * 2.5);
+                        if (q > 2.4 || q < -3.5) continue;
+                        if (q < 0) q *= 0.6;
+                        const env = Math.max(0, 1 - age / 1.8);
+                        val += Math.exp(-q * q) * Math.pow(env, 1.15);
+                    }
+
+                    val = Math.min(1, val * 1.2);
+                    const chr = glyphs[gy * N + gx];
+
+                    const baseAlpha = 0.25;
+                    const alpha = baseAlpha + val * 0.75;
+                    const r = Math.round(30 + (accentRGB[0] - 30) * val);
+                    const g = Math.round(50 + (accentRGB[1] - 50) * val);
+                    const b = Math.round(80 + (accentRGB[2] - 80) * val);
+
+                    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+                    ctx.fillText(chr, px, py);
+
+                    if (val > 0.05) {
+                        ctx.strokeStyle = `rgba(${accentRGB[0]}, ${accentRGB[1]}, ${accentRGB[2]}, ${val.toFixed(2)})`;
+                        ctx.lineWidth = fs * val * 0.12;
+                        ctx.strokeText(chr, px, py);
+                    }
+                }
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        requestAnimationFrame(render);
+
+        // Web Speech Recognition for Voice Queries on Overlay Click
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                setStatus("🎤 Listening...", "#4ade80", [74, 222, 128]); // Green
+            };
+
+            recognition.onresult = (event) => {
+                const userQuery = event.results[0][0].transcript;
+                setStatus("🧠 Thinking...", "#c084fc", [192, 132, 252]); // Purple
+
+                fetch('/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: userQuery })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    setStatus("🔊 Speaking...", "#38bdf8", [56, 189, 248]);
+                    const utterance = new SpeechSynthesisUtterance(data.reply);
+                    utterance.onend = () => {
+                        setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+                    };
+                    window.speechSynthesis.speak(utterance);
+                })
+                .catch(() => {
+                    setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+                });
+            };
+
+            recognition.onerror = () => {
+                setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+            };
+        }
+
+        window.addEventListener('pointerdown', (e) => {
+            emit(e.clientX, e.clientY);
+            if (recognition) {
+                try { recognition.start(); } catch(err) {}
+            }
+        });
+    </script>
+</body>
+</html>
