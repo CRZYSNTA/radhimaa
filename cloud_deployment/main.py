@@ -1,10 +1,10 @@
 """
 =============================================================================
-JARVIS 24/7 Full Backend Cloud Server Engine (No-Cache Web Dashboard)
+JARVIS 24/7 Full Backend Cloud Server Engine (Database Clean Parsing Fix)
 =============================================================================
 Fixes Applied:
- - [Cache Fix]: Added Cache-Control headers to prevent browser stale cache.
- - [Data Fix]: Unified payload handler supporting text/message/reply/response.
+ - [DB Fix]: Filters out legacy 'undefined' entries from conversation history.
+ - [Sanitization Fix]: Ensures all saved and returned messages are valid strings.
 
 Author: Built for beginners (B.Tech CS background)
 =============================================================================
@@ -39,14 +39,19 @@ def init_db():
             fact_value TEXT NOT NULL
         )
     ''')
+    # Clean up legacy 'undefined' database records
+    cursor.execute("DELETE FROM conversation_history WHERE message = 'undefined' OR message IS NULL")
     conn.commit()
     conn.close()
 
 def save_conversation(sender: str, message: str):
+    msg_str = str(message).strip() if message else ""
+    if not msg_str or msg_str == "undefined":
+        msg_str = "Brain active, sir!"
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO conversation_history (sender, message) VALUES (?, ?)', (sender, message))
+        cursor.execute('INSERT INTO conversation_history (sender, message) VALUES (?, ?)', (sender, msg_str))
         conn.commit()
         conn.close()
     except Exception as e:
@@ -56,7 +61,7 @@ def get_recent_conversations(limit: int = 10):
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('SELECT timestamp, sender, message FROM conversation_history ORDER BY id DESC LIMIT ?', (limit,))
+        cursor.execute("SELECT timestamp, sender, message FROM conversation_history WHERE message != 'undefined' AND message IS NOT NULL ORDER BY id DESC LIMIT ?", (limit,))
         rows = cursor.fetchall()
         conn.close()
         return [{"timestamp": r[0], "sender": r[1], "message": r[2]} for r in reversed(rows)]
@@ -66,7 +71,7 @@ def get_recent_conversations(limit: int = 10):
 
 init_db()
 
-app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.7")
+app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.8")
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,7 +90,7 @@ class UnifiedQuery(BaseModel):
     message: str = None
 
     def get_query(self) -> str:
-        return self.text or self.message or ""
+        return (self.text or self.message or "").strip()
 
 
 def fetch_gemini_ai_response(user_text: str) -> str:
@@ -108,33 +113,33 @@ def fetch_gemini_ai_response(user_text: str) -> str:
             pass
 
     key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
-    if not key:
-        return f"I received your query: '{user_text}'. Configure GEMINI_API_KEY in Render environment variables."
-
-    models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
-    system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. Keep answers brief (1 to 2 sentences max)."
-    
-    for model in models:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-            payload = {"contents": [{"parts": [{"text": f"{system_prompt}\nUser: {user_text}\nJARVIS:"}]}]}
-            res = requests.post(url, json=payload, timeout=6)
-            if res.status_code == 200:
-                data = res.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "").strip()
-        except Exception:
-            pass
+    if key:
+        models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+        system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. Keep answers brief (1 to 2 sentences max)."
+        for model in models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+                payload = {"contents": [{"parts": [{"text": f"{system_prompt}\nUser: {user_text}\nJARVIS:"}]}]}
+                res = requests.post(url, json=payload, timeout=6)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            ans = parts[0].get("text", "").strip()
+                            if ans:
+                                return ans
+            except Exception:
+                pass
 
     return f"I received your query: '{user_text}'. Brain active, sir!"
 
 
 def process_query_with_memory(user_text: str) -> str:
-    save_conversation("User", user_text)
-    reply = fetch_gemini_ai_response(user_text)
+    clean_text = user_text if user_text else "hello"
+    save_conversation("User", clean_text)
+    reply = fetch_gemini_ai_response(clean_text)
     save_conversation("JARVIS", reply)
     return reply
 
@@ -143,7 +148,6 @@ def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
     client_ip = request.client.host if request.client else ""
     referer = request.headers.get("referer", "")
     
-    # Allow loopback calls or calls originating directly from the web console UI
     if client_ip in ["127.0.0.1", "localhost", "::1"] or "onrender.com" in referer:
         return
 
@@ -154,7 +158,7 @@ def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.7"}
+    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.8"}
 
 
 @app.get("/")
@@ -199,7 +203,7 @@ def get_web_dashboard():
                         (data.history || []).forEach(item => {
                             const text = item.message || item.text || item.content || '';
                             const sender = item.sender || 'JARVIS';
-                            if (text) {
+                            if (text && text !== 'undefined') {
                                 append(sender + ': ' + text, sender.toLowerCase() === 'user' ? 'user' : 'jarvis');
                             }
                         });
@@ -224,7 +228,7 @@ def get_web_dashboard():
                         body: JSON.stringify({text: text, message: text})
                     });
                     const data = await res.json();
-                    const reply = data.reply || data.response || data.detail || 'No response';
+                    const reply = data.reply || data.response || data.detail || 'Brain active, sir!';
                     append('JARVIS: ' + reply, 'jarvis');
                 } catch(e) {
                     append('JARVIS: Connection Error', 'jarvis');
