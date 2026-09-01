@@ -2,7 +2,7 @@ services:
   - type: web
     name: jarvis-ai-assistant
     env: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: python cloud_deployment/main.py
     envVars:
       - key: PYTHON_VERSION
