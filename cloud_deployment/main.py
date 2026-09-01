@@ -1,10 +1,11 @@
 """
 =============================================================================
-JARVIS 24/7 Full Backend Cloud Server Engine (Database Clean Parsing Fix)
+JARVIS 24/7 Full Backend Cloud Server Engine (Database Clean Parsing & Aliases)
 =============================================================================
 Fixes Applied:
- - [DB Fix]: Filters out legacy 'undefined' entries from conversation history.
- - [Sanitization Fix]: Ensures all saved and returned messages are valid strings.
+ - Cleans legacy 'undefined' entries from database table
+ - Adds route aliases for /history and /api/history
+ - Passes X-JARVIS-Token in web console automatically
 
 Author: Built for beginners (B.Tech CS background)
 =============================================================================
@@ -71,7 +72,7 @@ def get_recent_conversations(limit: int = 10):
 
 init_db()
 
-app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.8")
+app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.9")
 
 app.add_middleware(
     CORSMiddleware,
@@ -158,7 +159,7 @@ def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.8"}
+    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.9"}
 
 
 @app.get("/")
@@ -197,7 +198,9 @@ def get_web_dashboard():
         <script>
             async function loadHistory() {
                 try {
-                    const res = await fetch('/api/history?limit=10&v=' + Date.now());
+                    const res = await fetch('/api/history?limit=10&v=' + Date.now(), {
+                        headers: { 'X-JARVIS-Token': 'jarvis_secret_key_777' }
+                    });
                     if (res.ok) {
                         const data = await res.json();
                         (data.history || []).forEach(item => {
@@ -271,6 +274,7 @@ def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str =
 
 
 @app.get("/api/history")
+@app.get("/history")
 def history_endpoint(request: Request, limit: int = 10, x_jarvis_token: str = Header(None)):
     verify_auth(request, x_jarvis_token)
     return {"history": get_recent_conversations(limit)}
