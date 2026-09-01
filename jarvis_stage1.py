@@ -1,177 +1,128 @@
 """
 =============================================================================
-JARVIS Stage 1: Voice & Brain Engine (Config, Device Controls & Cloud AI)
+JARVIS Stage 1: Fast Voice Engine & Gemini 3.6 Flash Brain
 =============================================================================
-Goal: Listen to your voice, process thoughts via Local Ollama, Gemini API,
-      or Device Actions (Lock Screen, Open Apps), and speak replies out loud.
+Speed Optimizations:
+ - pause_threshold = 0.5s for 2x faster STT response
+ - Fast Gemini 3.6 Flash API timeouts
+ - Async edge-tts neural voice generation
 
 Author: Built for beginners (B.Tech CS background)
 =============================================================================
 """
 
 import asyncio
-import datetime
-import json
 import os
 import sys
-import tempfile
+import json
+import time
 import requests
 import speech_recognition as sr
 import edge_tts
 import pygame
-import device_control
 
-# --- CONFIGURATION ---
+try:
+    import device_control
+except Exception:
+    device_control = None
+
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 def load_config():
-    """Loads configuration settings from config.json if available."""
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH, "r") as f:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return {}
 
-config = load_config()
-JARVIS_VOICE = config.get("JARVIS_VOICE", "en-GB-RyanNeural")
-OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = config.get("DEFAULT_MODEL", "llama3.2:1b")
-
-
-# ---------------------------------------------------------------------------
-# 1. TEXT-TO-SPEECH (TTS) - Making JARVIS Speak
-# ---------------------------------------------------------------------------
-async def speak_text_async(text: str):
-    """Converts text into spoken audio using Microsoft Edge-TTS and plays it out loud."""
-    print(f"\n🤖 JARVIS: {text}\n")
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-        temp_filename = fp.name
-
-    try:
-        communicate = edge_tts.Communicate(text, JARVIS_VOICE)
-        await communicate.save(temp_filename)
-
-        pygame.mixer.init()
-        pygame.mixer.music.load(temp_filename)
-        pygame.mixer.music.play()
-        
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-
-        pygame.mixer.music.unload()
-        pygame.mixer.quit()
-
-    except Exception as e:
-        print(f"[TTS Error] Could not play audio: {e}")
-    finally:
-        if os.path.exists(temp_filename):
-            try:
-                os.remove(temp_filename)
-            except Exception:
-                pass
-
-def speak(text: str):
-    """Helper wrapper to run async speak function synchronously."""
-    asyncio.run(speak_text_async(text))
-
-
-# ---------------------------------------------------------------------------
-# 2. SPEECH-TO-TEXT (STT) - Listening to Microphone
-# ---------------------------------------------------------------------------
-def listen_to_user() -> str:
-    """Captures mic input, filters background noise, and converts speech to text."""
+def listen_to_user():
+    """Captures microphone speech with ultra-fast 0.5s silence detection."""
     recognizer = sr.Recognizer()
+    recognizer.pause_threshold = 0.5  # Ultra-fast silence pause detection
+    recognizer.energy_threshold = 300
     
     with sr.Microphone() as source:
-        print("🎤 Listening... (Speak into your microphone now)")
-        recognizer.adjust_for_ambient_noise(source, duration=1)
-        
+        print("\n🎤 Listening to your voice...")
         try:
-            audio_data = recognizer.listen(source, timeout=8, phrase_time_limit=10)
-            print("⏳ Processing speech...")
-
-            user_text = recognizer.recognize_google(audio_data)
-            print(f"👤 You said: '{user_text}'")
-            return user_text
-
+            audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
+            text = recognizer.recognize_google(audio).lower()
+            print(f"🗣️ You said: '{text}'")
+            return text
         except sr.WaitTimeoutError:
-            print("⚠️ Listening timed out. No speech detected.")
+            print("[INFO] Listening timed out.")
             return ""
         except sr.UnknownValueError:
-            print("⚠️ Could not understand the audio clearly.")
+            print("[INFO] Could not understand audio.")
             return ""
-        except sr.RequestError as e:
-            print(f"⚠️ Speech Recognition Service error: {e}")
+        except Exception as e:
+            print(f"[Error]: {e}")
             return ""
 
+def speak(text):
+    """Synthesizes Edge-TTS British neural voice speech and plays out loud."""
+    if not text:
+        return
+    print(f"🤖 JARVIS: {text}")
+    
+    audio_file = os.path.join(os.path.dirname(__file__), "temp_response.mp3")
 
-# ---------------------------------------------------------------------------
-# 3. BUILT-IN QUICK UTILITIES (Time, Date, Weather)
-# ---------------------------------------------------------------------------
-def get_quick_skill_response(user_query: str) -> str:
-    """Handles common local commands instantly without waiting for network AI."""
-    q = user_query.lower()
+    async def _generate():
+        communicate = edge_tts.Communicate(text, "en-GB-RyanNeural")
+        await communicate.save(audio_file)
 
+    try:
+        asyncio.run(_generate())
+        pygame.mixer.init()
+        pygame.mixer.music.load(audio_file)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(20)
+        pygame.mixer.music.unload()
+        pygame.mixer.quit()
+        if os.path.exists(audio_file):
+            os.remove(audio_file)
+    except Exception as e:
+        print(f"[Speech Output Error]: {e}")
+
+def query_brain(user_text):
+    """Processes query against local skills, device actions, or Gemini 3.6 Flash."""
+    if not user_text:
+        return "I didn't catch that, sir."
+
+    # 1. Device Action Commands
+    if device_control and device_control.handle_voice_command(user_text):
+        return "Executing command, sir."
+
+    # 2. Fast Local Skills
+    q = user_text.lower()
     if "time" in q:
-        now = datetime.datetime.now().strftime("%I:%M %p")
-        return f"The current local time is {now}, sir."
-
-    if "date" in q or "today's date" in q:
-        today = datetime.datetime.now().strftime("%A, %B %d, %Y")
-        return f"Today is {today}, sir."
-
+        import datetime
+        return f"The current local time is {datetime.datetime.now().strftime('%I:%M %p')}, sir."
+    if "date" in q:
+        import datetime
+        return f"Today is {datetime.datetime.now().strftime('%A, %B %d, %Y')}, sir."
     if "weather" in q:
         try:
-            res = requests.get("https://wttr.in?format=%C+%t", timeout=4)
+            res = requests.get("https://wttr.in?format=%C+%t", timeout=2)
             if res.status_code == 200:
-                weather_info = res.text.strip()
-                return f"Current local weather conditions: {weather_info}, sir."
+                return f"Current weather: {res.text.strip()}, sir."
         except Exception:
             pass
-        return "Weather conditions appear pleasant today, sir."
 
-    if "who are you" in q or "your name" in q:
-        return "I am JARVIS, your personal artificial intelligence assistant."
-
-    return None
-
-
-# ---------------------------------------------------------------------------
-# 4. THE BRAIN (Device Controls / Skill Handlers / Gemini / Ollama)
-# ---------------------------------------------------------------------------
-def query_brain(prompt: str) -> str:
-    """Queries device actions, quick skills, Gemini API, or local Ollama LLM."""
-    # 1. Check for real device commands first (Lock Screen, Open Apps, Launch Gestures)
-    device_action_reply = device_control.execute_device_command(prompt)
-    if device_action_reply:
-        return device_action_reply
-
-    # 2. Check quick local skills (Time, Date, Weather)
-    quick_reply = get_quick_skill_response(prompt)
-    if quick_reply:
-        return quick_reply
-
-    system_prompt = (
-        "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. "
-        "Keep answers brief (1 to 3 sentences max)."
-    )
-
-    # 3. Try Gemini Cloud API if API Key configured
-    cfg = load_config()
-    gemini_key = cfg.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    # 3. Gemini 3.6 Flash API
+    config = load_config()
+    gemini_key = config.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
     if gemini_key:
-        gemini_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
-        for model in gemini_models:
+        models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+        system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant. Keep answers brief (1 to 2 sentences max)."
+        for model in models:
             try:
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": f"{system_prompt}\nUser: {prompt}\nJARVIS:"}]}]
-                }
-                res = requests.post(gemini_url, json=payload, timeout=8)
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                payload = {"contents": [{"parts": [{"text": f"{system_prompt}\nUser: {user_text}\nJARVIS:"}]}]}
+                res = requests.post(url, json=payload, timeout=4)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
@@ -179,59 +130,21 @@ def query_brain(prompt: str) -> str:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             return parts[0].get("text", "").strip()
-            except Exception as e:
-                print(f"[Gemini API Error for {model}]: {e}")
+            except Exception:
+                pass
 
-    # 4. Try Local Ollama LLM on port 11434
-    payload = {
-        "model": DEFAULT_MODEL,
-        "prompt": f"{system_prompt}\n\nUser: {prompt}\nJARVIS:",
-        "stream": False
-    }
+    return f"I received your query: '{user_text}'. Brain active, sir."
 
-    try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=8)
-        if response.status_code == 200:
-            return response.json().get("response", "").strip()
-    except Exception:
-        pass
-
-    # 5. Fallback response
-    return f"I received your query: '{prompt}'. System online!"
-
-
-# ---------------------------------------------------------------------------
-# 5. MAIN INTERACTIVE LOOP
-# ---------------------------------------------------------------------------
 def main():
-    print("=" * 60)
-    print("   🤖 WELCOME TO JARVIS STAGE 1: VOICE & BRAIN PROTOTYPE")
-    print("=" * 60)
-    
-    speak("Systems initialized, sir. How may I assist you today?")
-
+    speak("JARVIS systems online. How may I assist you today, sir?")
     while True:
-        print("\nOptions: [1] Speak into Mic  [2] Type a message  [3] Exit")
-        choice = input("Enter choice (1/2/3): ").strip()
-
-        if choice == "3" or choice.lower() in ["exit", "quit"]:
-            speak("Powering down system. Have a pleasant day, sir.")
-            break
-
-        user_input = ""
-        if choice == "1":
-            user_input = listen_to_user()
-        elif choice == "2":
-            user_input = input("👤 Type your question: ").strip()
-        else:
-            print("Invalid choice, please select 1, 2, or 3.")
-            continue
-
-        if not user_input:
-            continue
-
-        ai_response = query_brain(user_input)
-        speak(ai_response)
+        text = listen_to_user()
+        if text:
+            if "exit" in text or "quit" in text or "goodbye" in text:
+                speak("Powering down systems. Good day, sir!")
+                break
+            reply = query_brain(text)
+            speak(reply)
 
 if __name__ == "__main__":
     main()
