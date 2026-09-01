@@ -1,14 +1,11 @@
 """
 =============================================================================
-JARVIS 24/7 Full Backend Cloud Server Engine (FastAPI + SQLite Memory + WS)
+JARVIS 24/7 Full Backend Cloud Server Engine (Fixed UI Data Parsing & Auth)
 =============================================================================
-Endpoints:
- - GET  /           : Live Web Dashboard & Siri HUD Console
- - GET  /health      : 24/7 Cloud Health Check Status
- - POST /ask         : Mobile & iOS Siri Voice Shortcut Endpoint
- - POST /api/chat    : Web API Endpoint
- - GET  /api/history : Conversation History Endpoint (Auth Protected)
- - WS   /ws/chat     : Real-Time WebSocket Streaming Endpoint
+Fixes Applied:
+ - Allows Web Console UI requests seamlessly
+ - Handles JSON responses safely (data.reply || data.response || data.detail)
+ - Prevents 'undefined' text in chat logs
 
 Author: Built for beginners (B.Tech CS background)
 =============================================================================
@@ -23,9 +20,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# ---------------------------------------------------------------------------
-# Database Persistent Memory Layer
-# ---------------------------------------------------------------------------
 DB_PATH = os.path.join(os.path.dirname(__file__), "jarvis_memory.db")
 
 def init_db():
@@ -73,10 +67,7 @@ def get_recent_conversations(limit: int = 10):
 
 init_db()
 
-# ---------------------------------------------------------------------------
-# FastAPI Cloud Application
-# ---------------------------------------------------------------------------
-app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.5")
+app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.6")
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,11 +89,9 @@ class ChatQuery(BaseModel):
 
 
 def fetch_gemini_ai_response(user_text: str) -> str:
-    """Queries Google Gemini 3.6 Flash / 2.5 Flash cloud models."""
     if not user_text:
         return "I received an empty query, sir."
 
-    # Quick Local Skills
     q = user_text.lower()
     if "time" in q:
         import datetime
@@ -120,7 +109,7 @@ def fetch_gemini_ai_response(user_text: str) -> str:
 
     key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
     if not key:
-        return f"I received your query: '{user_text}'. Please configure GEMINI_API_KEY in environment variables."
+        return f"I received your query: '{user_text}'. Configure GEMINI_API_KEY in Render environment variables."
 
     models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
     system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. Keep answers brief (1 to 2 sentences max)."
@@ -140,11 +129,10 @@ def fetch_gemini_ai_response(user_text: str) -> str:
         except Exception:
             pass
 
-    return f"I received your query: '{user_text}'. Cloud brain active!"
+    return f"I received your query: '{user_text}'. Brain active, sir!"
 
 
 def process_query_with_memory(user_text: str) -> str:
-    """Saves conversation to database memory and returns AI response."""
     save_conversation("User", user_text)
     reply = fetch_gemini_ai_response(user_text)
     save_conversation("JARVIS", reply)
@@ -152,9 +140,12 @@ def process_query_with_memory(user_text: str) -> str:
 
 
 def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
-    """Security Check: Verifies token for remote endpoints."""
+    """Verifies auth token for remote API calls while allowing Web Console dashboard."""
     client_ip = request.client.host if request.client else ""
-    if client_ip in ["127.0.0.1", "localhost", "::1"]:
+    referer = request.headers.get("referer", "")
+    
+    # Allow loopback calls or calls originating directly from the built-in web console
+    if client_ip in ["127.0.0.1", "localhost", "::1"] or "onrender.com" in referer:
         return
 
     token_to_check = AUTH_TOKEN or os.environ.get("JARVIS_AUTH_TOKEN")
@@ -164,7 +155,7 @@ def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "system": "JARVIS 24/7 Full Backend Cloud Server", "version": "2.5"}
+    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.6"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -173,7 +164,7 @@ def get_web_dashboard():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>JARVIS 24/7 Full Backend Cloud Console</title>
+        <title>JARVIS 24/7 Cloud Console</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; display: flex; justify-content: center; }
@@ -190,7 +181,7 @@ def get_web_dashboard():
     </head>
     <body>
         <div class="card">
-            <h1>🤖 JARVIS 24/7 Full Backend Cloud Console</h1>
+            <h1>🤖 JARVIS 24/7 Cloud Console</h1>
             <div id="box"></div>
             <div class="row">
                 <input type="text" id="inp" placeholder="Type a message or ask a question..." onkeydown="if(event.key==='Enter') send()">
@@ -204,7 +195,11 @@ def get_web_dashboard():
                     if (res.ok) {
                         const data = await res.json();
                         (data.history || []).forEach(item => {
-                            append(item.sender + ': ' + item.message, item.sender.toLowerCase() === 'user' ? 'user' : 'jarvis');
+                            const text = item.message || item.text || item.content || '';
+                            const sender = item.sender || 'JARVIS';
+                            if (text) {
+                                append(sender + ': ' + text, sender.toLowerCase() === 'user' ? 'user' : 'jarvis');
+                            }
                         });
                     }
                 } catch(e) {}
@@ -220,11 +215,15 @@ def get_web_dashboard():
                 try {
                     const res = await fetch('/ask', {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-JARVIS-Token': 'jarvis_secret_key_777'
+                        },
                         body: JSON.stringify({text: text})
                     });
                     const data = await res.json();
-                    append('JARVIS: ' + data.reply, 'jarvis');
+                    const reply = data.reply || data.response || data.detail || 'No response';
+                    append('JARVIS: ' + reply, 'jarvis');
                 } catch(e) {
                     append('JARVIS: Connection Error', 'jarvis');
                 }
