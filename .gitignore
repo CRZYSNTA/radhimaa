@@ -30,6 +30,7 @@ jarvis_memory.db*
 !.env.example
 config.json
 .phone_config.json
+.pairing_session.json
 .tv_config.json
 secrets.json
 credentials.json

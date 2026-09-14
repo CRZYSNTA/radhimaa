@@ -56,7 +56,7 @@ def pair_mobile() -> str:
     JARVIS Tool: Initiates a mobile pairing session, creates a 6-digit PIN and QR code,
     and returns instructions with local URLs.
     """
-    session = generate_pairing_session(ttl_seconds=600)
+    session = generate_pairing_session(ttl_seconds=86400)
     pin = session["pin"]
     url = session["url"]
     primary_ip = session["primary_ip"]
@@ -73,7 +73,7 @@ def pair_mobile() -> str:
 
     msg = (
         f"Mobile pairing session initialized, sir.\n"
-        f"PIN: {pin} (valid for 10 minutes)\n"
+        f"PIN: {pin} (valid for 24 hours)\n"
         f"Mobile App URL: {url}\n"
         f"Local IP: {primary_ip}:8000\n"
         f"A scannable QR Code has been saved to your Desktop: pairing_qr.png"

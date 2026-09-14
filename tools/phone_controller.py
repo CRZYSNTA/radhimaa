@@ -14,6 +14,9 @@ import os
 import re
 import json
 import shutil
+import socket
+import threading
+import time
 import subprocess
 import logging
 from pathlib import Path
@@ -22,6 +25,55 @@ from typing import Optional, Dict, Any, List
 logger = logging.getLogger("JARVIS.Tools.Phone")
 
 PHONE_CONFIG_FILE = Path(__file__).resolve().parent.parent / ".phone_config.json"
+_adb_server_thread: Optional[threading.Thread] = None
+
+
+def is_adb_server_alive() -> bool:
+    """Checks if the local ADB server daemon is actively listening on port 5037."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.2)
+        s.connect(("127.0.0.1", 5037))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+def _run_adb_server_worker():
+    """Background worker loop keeping ADB server alive persistently."""
+    adb = get_adb_path()
+    if not adb:
+        return
+    while True:
+        if not is_adb_server_alive():
+            try:
+                proc = subprocess.Popen(
+                    [adb, "nodaemon", "server"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                proc.wait()
+            except Exception:
+                time.sleep(2)
+        time.sleep(2)
+
+
+def ensure_adb_server_running():
+    """Ensures ADB server daemon is continuously running so wireless connections don't drop."""
+    global _adb_server_thread
+    if not is_adb_server_alive():
+        if _adb_server_thread is None or not _adb_server_thread.is_alive():
+            _adb_server_thread = threading.Thread(
+                target=_run_adb_server_worker,
+                daemon=True,
+                name="ADB-Server-Daemon"
+            )
+            _adb_server_thread.start()
+            for _ in range(20):
+                if is_adb_server_alive():
+                    break
+                time.sleep(0.1)
 
 
 def get_phone_config() -> Dict[str, Any]:
@@ -67,11 +119,13 @@ def get_adb_path() -> Optional[str]:
     return None
 
 
-def get_connected_devices() -> List[str]:
+def get_connected_devices(auto_reconnect: bool = True) -> List[str]:
     """Returns list of connected ADB device serials/endpoints."""
     adb = get_adb_path()
     if not adb:
         return []
+
+    ensure_adb_server_running()
 
     try:
         res = subprocess.run([adb, "devices"], capture_output=True, text=True, timeout=12)
@@ -81,6 +135,19 @@ def get_connected_devices() -> List[str]:
             parts = line.strip().split()
             if len(parts) >= 2 and parts[1] == "device":
                 devices.append(parts[0])
+
+        if not devices and auto_reconnect:
+            cfg = get_phone_config()
+            saved_ip = cfg.get("wireless_ip")
+            saved_port = cfg.get("wireless_port", 5555)
+            if saved_ip:
+                subprocess.run(
+                    [adb, "connect", f"{saved_ip}:{saved_port}"],
+                    capture_output=True, text=True, timeout=8
+                )
+                time.sleep(0.3)
+                return get_connected_devices(auto_reconnect=False)
+
         return devices
     except Exception as e:
         logger.debug(f"[Phone] get_connected_devices notice: {e}")

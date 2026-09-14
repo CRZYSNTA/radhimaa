@@ -68,6 +68,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!authToken) {
       attemptPairing(pinParam);
     }
+  } else if (!authToken) {
+    // Attempt auto-discovery of active pairing PIN from local server
+    fetch('/api/pairing/status')
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.pin) {
+          const pinInput = document.getElementById('pair-pin');
+          if (pinInput && !pinInput.value) {
+            pinInput.value = d.pin;
+          }
+        }
+      })
+      .catch(() => {});
   }
 
   if (authToken) {

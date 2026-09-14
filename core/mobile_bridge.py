@@ -27,8 +27,8 @@ import database
 
 logger = logging.getLogger("JARVIS.MobileBridge")
 
-# Cross-process pairing session file in system temp
-PAIRING_SESSION_FILE = Path(tempfile.gettempdir()) / "jarvis_active_pairing.json"
+# Cross-process pairing session file in project root
+PAIRING_SESSION_FILE = Path(__file__).resolve().parent.parent / ".pairing_session.json"
 
 # In-memory pairing session state cache
 _active_pairing_session: Dict[str, Any] = {
@@ -112,9 +112,9 @@ def get_network_ips() -> List[Dict[str, str]]:
         ip_list.append({"ip": "127.0.0.1", "type": "Localhost"})
     return ip_list
 
-def generate_pairing_session(ttl_seconds: int = 600) -> Dict[str, Any]:
+def generate_pairing_session(ttl_seconds: int = 86400) -> Dict[str, Any]:
     """
-    Generates a fresh 6-digit pairing PIN with a 10-minute expiry time.
+    Generates a fresh 6-digit pairing PIN with a 24-hour expiry time.
     Returns session details with URLs for local network connection.
     """
     pin = f"{random.randint(100000, 999999)}"
@@ -143,33 +143,34 @@ def generate_pairing_session(ttl_seconds: int = 600) -> Dict[str, Any]:
     }
 
 def get_current_pairing_status() -> Dict[str, Any]:
-    """Returns the current active pairing PIN if still valid."""
+    """Returns the current active pairing PIN or auto-generates a fresh 24h session."""
     session = _load_stored_pairing_session()
     now = time.time()
     pin = session.get("pin")
     expires_at = session.get("expires_at", 0.0)
-    if pin and now < expires_at:
-        ips = get_network_ips()
-        primary_ip = ips[0]["ip"] if ips else "127.0.0.1"
-        for item in ips:
-            if "wi-fi" in item["type"].lower() or item["ip"].startswith("192.168."):
-                primary_ip = item["ip"]
-                break
-        return {
-            "active": True,
-            "pin": pin,
-            "expires_at": expires_at,
-            "ttl_remaining": int(expires_at - now),
-            "url": f"http://{primary_ip}:8000/app?pin={pin}",
-            "primary_ip": primary_ip,
-            "interfaces": ips
-        }
-    return {"active": False, "pin": None, "ttl_remaining": 0}
+    if not pin or now >= expires_at:
+        return generate_pairing_session(ttl_seconds=86400)
+
+    ips = get_network_ips()
+    primary_ip = ips[0]["ip"] if ips else "127.0.0.1"
+    for item in ips:
+        if "wi-fi" in item["type"].lower() or item["ip"].startswith("192.168."):
+            primary_ip = item["ip"]
+            break
+    return {
+        "active": True,
+        "pin": pin,
+        "expires_at": expires_at,
+        "ttl_remaining": int(expires_at - now),
+        "url": f"http://{primary_ip}:8000/app?pin={pin}",
+        "primary_ip": primary_ip,
+        "interfaces": ips
+    }
 
 def verify_pairing_pin(pin: str, device_name: str = "Mobile Device") -> Optional[Dict[str, Any]]:
     """
     Validates a submitted PIN. If valid, generates a permanent device token,
-    registers it in SQLite database, and invalidates the single-use PIN.
+    registers it in SQLite database.
     Supports master auth token as an emergency or zero-config pairing key.
     """
     clean_pin = str(pin).strip()
@@ -205,9 +206,6 @@ def verify_pairing_pin(pin: str, device_name: str = "Mobile Device") -> Optional
         logger.warning(f"Pairing attempt with expired PIN: {clean_pin}")
         _clear_stored_pairing_session()
         return None
-
-    # Clear active PIN to prevent reuse
-    _clear_stored_pairing_session()
 
     token = secrets.token_urlsafe(32)
     device_id = f"dev_{secrets.token_hex(4)}"

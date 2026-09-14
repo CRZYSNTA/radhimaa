@@ -256,7 +256,25 @@ def main():
     # 1. Ensure FastAPI server is running
     start_backend_server_if_needed()
 
-    # 2. Initialize Push-To-Talk Engine (Home key)
+    # 2. Ensure ADB server daemon is running persistently & auto-reconnect wireless phone
+    try:
+        from tools.phone_controller import ensure_adb_server_running, auto_reconnect_wireless
+        threading.Thread(
+            target=lambda: (ensure_adb_server_running(), auto_reconnect_wireless()),
+            daemon=True,
+            name="Phone-ADB-Worker"
+        ).start()
+    except Exception as e:
+        logger.debug(f"[Desktop Phone Init Note]: {e}")
+
+    # 3. Generate Mobile Companion Pairing QR and session on Desktop
+    try:
+        from tools.pairing_manager import pair_mobile
+        threading.Thread(target=pair_mobile, daemon=True, name="Mobile-Pairing-Worker").start()
+    except Exception as e:
+        logger.debug(f"[Desktop Mobile Pairing Init Note]: {e}")
+
+    # 4. Initialize Push-To-Talk Engine (Home key)
     try:
         ptt = get_ptt_engine(on_transcript=handle_ptt_transcript)
         logger.info("[Desktop] Push-to-Talk initialized. Hold [HOME] or click [MIC] to speak.")
