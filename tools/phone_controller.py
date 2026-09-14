@@ -74,7 +74,7 @@ def get_connected_devices() -> List[str]:
         return []
 
     try:
-        res = subprocess.run([adb, "devices"], capture_output=True, text=True, timeout=5)
+        res = subprocess.run([adb, "devices"], capture_output=True, text=True, timeout=12)
         lines = res.stdout.strip().splitlines()[1:]
         devices = []
         for line in lines:
@@ -82,7 +82,8 @@ def get_connected_devices() -> List[str]:
             if len(parts) >= 2 and parts[1] == "device":
                 devices.append(parts[0])
         return devices
-    except Exception:
+    except Exception as e:
+        logger.debug(f"[Phone] get_connected_devices notice: {e}")
         return []
 
 
@@ -100,7 +101,7 @@ def get_device_wifi_ip(device_id: Optional[str] = None) -> Optional[str]:
     try:
         res = subprocess.run(
             cmd_prefix + ["shell", "ip", "-f", "inet", "addr", "show", "wlan0"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=8
         )
         match = re.search(r'inet\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', res.stdout)
         if match:
@@ -112,7 +113,7 @@ def get_device_wifi_ip(device_id: Optional[str] = None) -> Optional[str]:
     try:
         res = subprocess.run(
             cmd_prefix + ["shell", "ip", "route"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=8
         )
         match = re.search(r'src\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', res.stdout)
         if match:
@@ -124,7 +125,7 @@ def get_device_wifi_ip(device_id: Optional[str] = None) -> Optional[str]:
     try:
         res = subprocess.run(
             cmd_prefix + ["shell", "getprop", "dhcp.wlan0.ipaddress"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=8
         )
         ip = res.stdout.strip()
         if ip and re.match(r'^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$', ip):
@@ -144,7 +145,7 @@ def connect_wireless_phone(ip: str, port: int = 5555) -> str:
     clean_ip = ip.strip()
     endpoint = f"{clean_ip}:{port}"
     try:
-        res = subprocess.run([adb, "connect", endpoint], capture_output=True, text=True, timeout=8)
+        res = subprocess.run([adb, "connect", endpoint], capture_output=True, text=True, timeout=10)
         out = res.stdout.strip()
         if "connected to" in out.lower() or "already connected" in out.lower():
             save_phone_config(ip=clean_ip, port=port)
@@ -199,7 +200,7 @@ def setup_wireless_adb() -> str:
     # Enable TCP/IP on port 5555
     res_tcpip = subprocess.run(
         [adb, "-s", device_id, "tcpip", "5555"],
-        capture_output=True, text=True, timeout=6
+        capture_output=True, text=True, timeout=10
     )
 
     if phone_ip:
@@ -237,8 +238,9 @@ def auto_reconnect_wireless() -> bool:
             try:
                 subprocess.run(
                     [adb, "connect", f"{saved_ip}:{saved_port}"],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True, timeout=10
                 )
+                time.sleep(0.3)
                 devices = get_connected_devices()
                 if devices:
                     logger.info(f"[Phone] Reconnected wirelessly to {saved_ip}:{saved_port}")
@@ -280,20 +282,20 @@ def unlock_phone(pin: Optional[str] = None) -> str:
     device_id = devices[0]
     try:
         # 1. Wake up screen
-        subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "224"], capture_output=True, timeout=5)
+        subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "224"], capture_output=True, timeout=10)
 
         # 2. Dismiss swipe keyguard
-        subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "82"], capture_output=True, timeout=5)
+        subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "82"], capture_output=True, timeout=10)
         # Swipe up gesture in case keyevent 82 is ignored by OEM keyguard
-        subprocess.run([adb, "-s", device_id, "shell", "input", "swipe", "500", "1600", "500", "400", "200"], capture_output=True, timeout=5)
+        subprocess.run([adb, "-s", device_id, "shell", "input", "swipe", "500", "1600", "500", "400", "200"], capture_output=True, timeout=10)
 
         # 3. Determine PIN
         actual_pin = pin if (pin and str(pin).strip()) else get_phone_config().get("default_pin")
 
         if actual_pin and str(actual_pin).strip():
             clean_pin = str(actual_pin).strip()
-            subprocess.run([adb, "-s", device_id, "shell", "input", "text", clean_pin], capture_output=True, timeout=5)
-            subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "66"], capture_output=True, timeout=5)
+            subprocess.run([adb, "-s", device_id, "shell", "input", "text", clean_pin], capture_output=True, timeout=10)
+            subprocess.run([adb, "-s", device_id, "shell", "input", "keyevent", "66"], capture_output=True, timeout=10)
             logger.info(f"[Phone] Unlock sequence with PIN dispatched to {device_id}.")
             return f"Phone awakened, lock screen dismissed, and PIN entered successfully on {device_id}, sir."
 
@@ -315,5 +317,5 @@ def lock_phone() -> str:
     if not devices:
         return "No Android device detected."
 
-    subprocess.run([adb, "-s", devices[0], "shell", "input", "keyevent", "26"], capture_output=True, timeout=5)
+    subprocess.run([adb, "-s", devices[0], "shell", "input", "keyevent", "26"], capture_output=True, timeout=10)
     return "Phone locked and display turned off, sir."
