@@ -113,7 +113,7 @@ def start_backend_server_if_needed():
 
     config = uvicorn.Config(
         app,
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         log_level="warning",
         access_log=False
