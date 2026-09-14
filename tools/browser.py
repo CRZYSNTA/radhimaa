@@ -48,30 +48,16 @@ def search_web(query: str) -> str:
     webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote(query)}")
     return f"Opened Google search for '{query}', sir."
 
-def play_youtube(query: str) -> str:
-    if not query:
-        return "No video specified."
-    
-    driver = get_driver()
-    if driver:
-        try:
-            url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
-            driver.get(url)
-            time.sleep(2)
-            
-            from selenium.webdriver.common.by import By
-            videos = driver.find_elements(By.XPATH, '//*[@id="video-title"]')
-            for v in videos:
-                if v.is_displayed():
-                    v.click()
-                    break
-            return f"Playing '{query}' on YouTube, sir."
-        except Exception as e:
-            print(f"[Browser YouTube Error]: {e}")
-    
+def play_youtube(query: str = "") -> str:
+    clean_q = (query or "").strip()
     import webbrowser
-    webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}")
-    return f"Opened YouTube for '{query}', sir."
+    if not clean_q:
+        webbrowser.open("https://www.youtube.com")
+        return "Opening YouTube, sir."
+
+    encoded = urllib.parse.quote(clean_q)
+    webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
+    return f"Opening '{clean_q}' on YouTube, sir."
 
 def close_browser() -> str:
     global _driver

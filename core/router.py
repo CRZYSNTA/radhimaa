@@ -51,8 +51,29 @@ def route_intent(user_query: str) -> dict:
         action = "up" if "up" in q or "increase" in q else ("down" if "down" in q or "decrease" in q else "up")
         return {"type": "SIMPLE", "tool": "set_volume", "params": {"action": action}}
 
+    # -----------------------------------------------------------------------
+    # YouTube / Song / Video Playback Fast-Paths
+    # Handles: "open animals song in youtube", "play animals song on youtube", "open youtube", etc.
+    # -----------------------------------------------------------------------
+    if q in ("open youtube", "launch youtube", "go to youtube", "youtube", "start youtube"):
+        return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": ""}}
+
+    yt_match = re.search(r'^(?:open|play|search|search for|find)\s+(.+?)\s+(?:in|on)\s+youtube$', q)
+    if yt_match and not ("on tv" in q or "tv" in q):
+        song_query = yt_match.group(1).strip()
+        return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": song_query}}
+
+    song_prefix_match = re.search(r'^(?:open|play|listen to)\s+(?:song|video|track|music)\s+(.+)$', q)
+    if song_prefix_match and not ("on tv" in q or "tv" in q):
+        song_query = song_prefix_match.group(1).strip()
+        if " on spotify" in song_query or " spotify" in song_query:
+            clean_q = song_query.replace(" on spotify", "").replace(" spotify", "").strip()
+            return {"type": "SIMPLE", "tool": "spotify_control", "params": {"action": "play", "query": clean_q}}
+        clean_q = song_query.replace(" on youtube", "").replace(" youtube", "").strip()
+        return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": clean_q}}
+
     # Specific Song / Video Playback Requests (e.g. "play animal song", "play despacito")
-    if q.startswith("play ") and len(q.split()) > 1:
+    if q.startswith("play ") and len(q.split()) > 1 and not ("on tv" in q or "tv" in q):
         song_query = re.sub(r"^play\s+", "", q).strip().rstrip(".")
         if " on spotify" in song_query or " spotify" in song_query:
             clean_q = song_query.replace(" on spotify", "").replace(" spotify", "").strip()
@@ -61,6 +82,33 @@ def route_intent(user_query: str) -> dict:
             clean_q = song_query.replace(" on youtube", "").replace(" youtube", "").strip()
             return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": clean_q}}
         return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": song_query}}
+
+    # -----------------------------------------------------------------------
+    # Social Messaging & WhatsApp Fast-Paths
+    # Handles: "send message to mom: hello", "send whatsapp to 9876543210: are you free", "send message", etc.
+    # -----------------------------------------------------------------------
+    if any(q.startswith(k) for k in ("send message", "send a message", "send whatsapp", "send a whatsapp", "whatsapp ")):
+        raw = user_query.strip()
+        # "send message to <recipient>: <message>" or "send message to <recipient> saying <message>"
+        m = re.search(r'^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?message|send\s+(?:a\s+)?whatsapp|whatsapp)\s+to\s+([^:]+?)[:\s]+(?:saying\s+|that\s+)?(.+)$', raw, re.IGNORECASE)
+        if m:
+            recip = m.group(1).strip()
+            msg_text = m.group(2).strip()
+            return {"type": "SIMPLE", "tool": "send_whatsapp_message", "params": {"recipient": recip, "message": msg_text}}
+
+        # "send message to <recipient>" (without message body)
+        m_recip_only = re.search(r'^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?message|send\s+(?:a\s+)?whatsapp|whatsapp)\s+to\s+([^:]+)$', raw, re.IGNORECASE)
+        if m_recip_only:
+            recip = m_recip_only.group(1).strip()
+            return {"type": "SIMPLE", "tool": "send_whatsapp_message", "params": {"recipient": recip, "message": ""}}
+
+        # "send message: <message>" or "send message <message>"
+        m_msg_only = re.search(r'^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?message|send\s+(?:a\s+)?whatsapp|whatsapp)[:\s]+(.+)$', raw, re.IGNORECASE)
+        if m_msg_only:
+            msg_text = m_msg_only.group(1).strip()
+            return {"type": "SIMPLE", "tool": "send_whatsapp_message", "params": {"recipient": "", "message": msg_text}}
+
+        return {"type": "SIMPLE", "tool": "send_whatsapp_message", "params": {"recipient": "", "message": ""}}
 
     # Playback Media Key Toggles (pause, resume, skip, etc.)
     if q in ("play", "pause", "resume", "pause music", "resume music", "skip", "next track", "previous track"):
@@ -80,11 +128,16 @@ def route_intent(user_query: str) -> dict:
     if "telemetry" in q or "system telemetry" in q:
         return {"type": "SIMPLE", "tool": "get_system_telemetry", "params": {}}
 
+    # -----------------------------------------------------------------------
+    # Desktop Application Launching Fast-Paths
+    # Handles: "open whatsapp", "open chrome", "launch notepad", "open <any app>"
+    # -----------------------------------------------------------------------
     known_apps = (
         "whatsapp", "telegram", "discord", "chrome", "google chrome", "edge", "microsoft edge",
         "notepad", "calculator", "calc", "terminal", "cmd", "powershell", "task manager", "taskmgr",
         "settings", "explorer", "files", "file explorer", "spotify", "camera", "photos", "paint",
-        "vscode", "vs code", "code", "word", "excel", "powerpoint", "obsidian"
+        "vscode", "vs code", "code", "word", "excel", "powerpoint", "obsidian", "browser", "youtube",
+        "clock", "alarms", "store", "microsoft store"
     )
     if q.startswith("open app ") or q.startswith("launch app ") or (q.startswith("open ") and any(a in q for a in known_apps)) or (q.startswith("launch ") and any(a in q for a in known_apps)):
         matched_app = None
@@ -93,7 +146,18 @@ def route_intent(user_query: str) -> dict:
                 matched_app = a
                 break
         if matched_app:
-            return {"type": "SIMPLE", "tool": "open_application", "params": {"application_id": matched_app}}
+            if matched_app == "youtube":
+                return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": ""}}
+            return {"type": "SIMPLE", "tool": "open_app", "params": {"name": matched_app}}
+
+    # Generic dynamic application launch for any other Windows app
+    if q.startswith("open ") or q.startswith("launch "):
+        app_cand = re.sub(r'^(?:open\s+app|launch\s+app|open|launch)[:\s]+', '', q).strip()
+        reserved = ("note", "vault", "memory", "priorities", "phone", "tv", "camera", "reminder", "clipboard", "url", "link")
+        if app_cand and len(app_cand.split()) <= 3 and not any(app_cand.startswith(r) for r in reserved):
+            if "youtube" in app_cand:
+                return {"type": "SIMPLE", "tool": "play_youtube", "params": {"query": ""}}
+            return {"type": "SIMPLE", "tool": "open_app", "params": {"name": app_cand}}
 
     if q.startswith("read note ") or q.startswith("view note "):
         note_name = re.sub(r'^(read note|view note)[:\s]+', '', user_query, flags=re.IGNORECASE).strip()

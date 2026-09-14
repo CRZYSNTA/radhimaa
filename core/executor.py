@@ -73,11 +73,11 @@ class ToolExecutor:
             "control_window": lambda p: control_window(p.get("action", "minimize")),
             "take_screenshot": lambda p: take_screenshot(),
             "lock_screen": lambda p: lock_screen(),
-            "open_app": lambda p: open_app(p.get("name", "") or p.get("target", "") or p.get("app", "")),
+            "open_app": lambda p: open_app(p.get("name", "") or p.get("application_id", "") or p.get("app_name", "") or p.get("target", "") or p.get("app", "")),
             "close_app": lambda p: close_app(p.get("name", "") or p.get("target", "") or p.get("app", "")),
             "search_web": lambda p: search_web(p.get("query", "")),
             "search_google": lambda p: search_web(p.get("query", "")),
-            "play_youtube": lambda p: play_youtube(p.get("query", "")),
+            "play_youtube": lambda p: play_youtube(p.get("query", "") or p.get("song", "") or p.get("video", "")),
             "get_weather": lambda p: get_weather(p.get("location", "")),
             "get_news": lambda p: get_news(),
             "get_time": lambda p: get_time(),
@@ -165,7 +165,7 @@ class ToolExecutor:
 
         # Social & Messaging
         from tools.social import send_whatsapp_message, check_instagram_dms, reply_instagram_dm
-        self.tools["send_whatsapp_message"] = lambda p: send_whatsapp_message(p.get("recipient", ""), p.get("message", ""))
+        self.tools["send_whatsapp_message"] = lambda p: send_whatsapp_message(p.get("recipient", "") or p.get("to", "") or p.get("contact", ""), p.get("message", "") or p.get("text", ""))
         self.tools["check_instagram_dms"] = lambda p: check_instagram_dms(p.get("username"), p.get("password"))
         self.tools["reply_instagram_dm"] = lambda p: reply_instagram_dm(p.get("thread_id", ""), p.get("message", ""))
 
@@ -274,7 +274,7 @@ class ToolExecutor:
         from tools.leo_tools import (
             open_application, manage_obsidian_note, get_system_telemetry
         )
-        self.tools["open_application"] = lambda p: open_application(p.get("app_name") or p.get("app") or "")
+        self.tools["open_application"] = lambda p: open_app(p.get("application_id", "") or p.get("app_name", "") or p.get("name", "") or p.get("app", "") or p.get("target", ""))
         self.tools["manage_obsidian_note"] = lambda p: manage_obsidian_note(p.get("action", "read"), p.get("title", ""), p.get("content", ""))
         self.tools["get_system_telemetry"] = lambda p: get_system_telemetry()
 

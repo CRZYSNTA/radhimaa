@@ -13,31 +13,43 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("JARVIS.Tools.Social")
 
-def send_whatsapp_message(recipient: str, message: str) -> str:
+def send_whatsapp_message(recipient: str = "", message: str = "") -> str:
     """
     Launches WhatsApp with a pre-filled message to a recipient phone number or contact.
     Args:
         recipient: Phone number (e.g. '+1234567890') or contact name.
         message: The text message to send.
     """
-    if not recipient or not message:
-        return "Recipient and message must both be provided, sir."
+    import os
+    import sys
+
+    clean_msg = (message or "").strip()
+    clean_recip = (recipient or "").strip()
+
+    if not clean_msg and not clean_recip:
+        from tools.applications import open_app
+        open_app("whatsapp")
+        return "Opening WhatsApp for you, sir."
+
+    encoded_msg = urllib.parse.quote(clean_msg) if clean_msg else ""
+    clean_num = re.sub(r"[^\d+]", "", clean_recip)
 
     try:
-        clean_num = re.sub(r"[^\d+]", "", recipient)
-        encoded_msg = urllib.parse.quote(message)
-
-        # If clean phone number is provided, use direct API link
         if len(clean_num) >= 7:
-            # WhatsApp desktop deep link
-            url = f"whatsapp://send?phone={clean_num}&text={encoded_msg}"
-        else:
-            # Fallback search
+            url = f"whatsapp://send?phone={clean_num}" + (f"&text={encoded_msg}" if encoded_msg else "")
+        elif encoded_msg:
             url = f"whatsapp://send?text={encoded_msg}"
+        else:
+            url = "whatsapp:"
 
-        webbrowser.open(url)
-        logger.info(f"[Social] Dispatched WhatsApp message to {recipient}")
-        return f"Opening WhatsApp with message drafted for {recipient}, sir."
+        if sys.platform == "win32":
+            os.system(f'start "" "{url}"')
+        else:
+            webbrowser.open(url)
+
+        logger.info(f"[Social] Dispatched WhatsApp message to {clean_recip or 'draft'}")
+        target = f" for {clean_recip}" if clean_recip else ""
+        return f"Opening WhatsApp with message drafted{target}, sir."
 
     except Exception as e:
         logger.error(f"[WhatsApp Error]: {e}")

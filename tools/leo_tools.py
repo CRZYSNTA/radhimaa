@@ -33,37 +33,8 @@ def get_system_telemetry() -> str:
 
 def open_application(app_name: str) -> str:
     """Opens or launches an application on Windows."""
-    name = app_name.lower().strip()
-
-    app_map = {
-        "notepad": "notepad.exe",
-        "calculator": "calc.exe",
-        "calc": "calc.exe",
-        "chrome": "start chrome",
-        "browser": "start chrome",
-        "edge": "start msedge",
-        "spotify": "start spotify:",
-        "obsidian": "start obsidian://",
-        "terminal": "wt.exe",
-        "cmd": "cmd.exe",
-        "code": "code",
-        "vscode": "code",
-        "vs code": "code",
-        "explorer": "explorer.exe",
-        "files": "explorer.exe",
-        "task manager": "taskmgr.exe",
-        "taskmgr": "taskmgr.exe",
-    }
-
-    cmd = app_map.get(name, name)
-    try:
-        if cmd.startswith("start "):
-            os.system(cmd)
-        else:
-            subprocess.Popen(cmd, shell=True)
-        return f"Opened {app_name}."
-    except Exception as e:
-        return f"Failed to launch {app_name}: {e}"
+    from tools.applications import open_app
+    return open_app(app_name)
 
 
 def manage_obsidian_note(action: str, title: str, content: str = "") -> str:

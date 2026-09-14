@@ -106,7 +106,7 @@ TOOL_PERMISSIONS: Dict[str, PermissionLevel] = {
     "analyze_clipboard": PermissionLevel.SAFE,
 
     # Social & Messaging
-    "send_whatsapp_message": PermissionLevel.CONFIRM,
+    "send_whatsapp_message": PermissionLevel.SAFE,
     "check_instagram_dms": PermissionLevel.SAFE,
     "reply_instagram_dm": PermissionLevel.CONFIRM,
 
