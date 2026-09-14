@@ -80,9 +80,15 @@ def route_intent(user_query: str) -> dict:
     if "telemetry" in q or "system telemetry" in q:
         return {"type": "SIMPLE", "tool": "get_system_telemetry", "params": {}}
 
-    if q.startswith("open app ") or q.startswith("launch app ") or (q.startswith("open ") and any(a in q for a in ("notepad", "calc", "obsidian", "chrome", "code", "vscode", "spotify", "terminal"))):
+    known_apps = (
+        "whatsapp", "telegram", "discord", "chrome", "google chrome", "edge", "microsoft edge",
+        "notepad", "calculator", "calc", "terminal", "cmd", "powershell", "task manager", "taskmgr",
+        "settings", "explorer", "files", "file explorer", "spotify", "camera", "photos", "paint",
+        "vscode", "vs code", "code", "word", "excel", "powerpoint", "obsidian"
+    )
+    if q.startswith("open app ") or q.startswith("launch app ") or (q.startswith("open ") and any(a in q for a in known_apps)) or (q.startswith("launch ") and any(a in q for a in known_apps)):
         matched_app = None
-        for a in ("notepad", "calc", "obsidian", "chrome", "code", "vscode", "spotify", "terminal"):
+        for a in known_apps:
             if a in q:
                 matched_app = a
                 break

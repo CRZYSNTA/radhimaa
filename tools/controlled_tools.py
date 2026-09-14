@@ -24,13 +24,31 @@ SAFE_APPLICATIONS = {
     "calc": "calc.exe",
     "calculator": "calc.exe",
     "chrome": "chrome",
+    "google chrome": "chrome",
     "edge": "msedge",
+    "microsoft edge": "msedge",
     "spotify": "spotify",
     "obsidian": "obsidian",
     "terminal": "wt.exe",
     "cmd": "cmd.exe",
+    "powershell": "powershell.exe",
     "code": "code",
-    "vscode": "code"
+    "vscode": "code",
+    "whatsapp": "whatsapp:",
+    "telegram": "tg:",
+    "discord": "discord:",
+    "explorer": "explorer.exe",
+    "files": "explorer.exe",
+    "file explorer": "explorer.exe",
+    "settings": "ms-settings:",
+    "task manager": "taskmgr.exe",
+    "taskmgr": "taskmgr.exe",
+    "camera": "microsoft.windows.camera:",
+    "photos": "ms-photos:",
+    "paint": "mspaint.exe",
+    "word": "winword.exe",
+    "excel": "excel.exe",
+    "powerpoint": "powerpnt.exe",
 }
 
 
@@ -103,7 +121,10 @@ class OpenApplicationTool:
 
         try:
             if sys.platform == "win32":
-                subprocess.Popen(f"start {target_cmd}", shell=True)
+                if ":" in target_cmd and not target_cmd.startswith("c:"):
+                    os.system(f'start "" "{target_cmd}"')
+                else:
+                    subprocess.Popen(f'start "" {target_cmd}', shell=True)
             else:
                 subprocess.Popen([target_cmd])
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
