@@ -4,6 +4,10 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "interface/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -24,16 +28,16 @@
       "dest": "api/index.py"
     },
     {
+      "src": "/interface/(.*)",
+      "dest": "/interface/$1"
+    },
+    {
       "src": "/hologram",
       "dest": "/interface/index.html"
     },
     {
       "src": "/",
       "dest": "/interface/index.html"
-    },
-    {
-      "src": "/interface/(.*)",
-      "dest": "/interface/$1"
     },
     {
       "src": "/(.*)",
