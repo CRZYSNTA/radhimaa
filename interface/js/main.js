@@ -45,15 +45,26 @@ class JarvisHologramApp {
             if (this.isTabVisible) this.lastTime = performance.now();
         });
 
-        // 6. Connect WebSocket Status Indicator
+        // 6. Connect WebSocket / Cloud Bridge Status Indicator
         if (window.JarvisWS) {
-            window.JarvisWS.onConnectionChange = (connected) => {
+            window.JarvisWS.onConnectionChange = (connected, label) => {
                 const connBadge = document.getElementById("hud-ws-status");
                 if (connBadge) {
-                    connBadge.textContent = connected ? "LINK: SYNCHRONIZED" : "LINK: RECONNECTING...";
+                    if (label) {
+                        connBadge.textContent = label;
+                    } else {
+                        connBadge.textContent = connected ? "LINK: SYNCHRONIZED" : "LINK: RECONNECTING...";
+                    }
                     connBadge.className = connected ? "status-tag ok" : "status-tag alert";
                 }
             };
+            if (window.JarvisWS.isConnected) {
+                const connBadge = document.getElementById("hud-ws-status");
+                if (connBadge) {
+                    connBadge.textContent = window.JarvisWS.isCloud ? "CLOUD LINK: ACTIVE" : "LINK: SYNCHRONIZED";
+                    connBadge.className = "status-tag ok";
+                }
+            }
         }
 
         // 7. Start Animation Loop

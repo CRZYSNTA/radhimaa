@@ -18,10 +18,10 @@ import json
 import sqlite3
 import requests
 from collections import defaultdict
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -125,6 +125,9 @@ def check_rate_limit(client_id: str):
 class UnifiedQuery(BaseModel):
     text: Optional[str] = None
     message: Optional[str] = None
+    conversation_id: Optional[str] = None
+    confirmed: Optional[bool] = False
+    attachments: Optional[List[Any]] = None
 
     def get_query(self) -> str:
         q = (self.text or self.message or "").strip()
@@ -368,6 +371,32 @@ def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str =
     verify_auth(request, x_jarvis_token)
     reply = process_query_with_memory(payload.get_query())
     return {"reply": reply, "response": reply}
+
+@app.post("/v1/chat")
+def v1_chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: Optional[str] = Header(None)):
+    verify_auth(request, x_jarvis_token)
+    reply = process_query_with_memory(payload.get_query())
+    return {
+        "reply": reply,
+        "response": reply,
+        "conversation_id": payload.conversation_id or "conv-cloud",
+        "tool_events": []
+    }
+
+@app.post("/v1/chat/stream")
+async def v1_chat_stream_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: Optional[str] = Header(None)):
+    verify_auth(request, x_jarvis_token)
+    query = payload.get_query()
+    reply = process_query_with_memory(query)
+
+    async def event_generator():
+        words = reply.split(" ")
+        for i, word in enumerate(words):
+            chunk = word + (" " if i < len(words) - 1 else "")
+            yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'content': reply, 'audio_b64': None})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.get("/api/history")
 @app.get("/history")

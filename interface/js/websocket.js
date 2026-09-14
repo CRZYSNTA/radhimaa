@@ -16,7 +16,58 @@ class JarvisWebSocketClient {
         // Listeners for UI notification
         this.onConnectionChange = null;
 
-        this.initConnection();
+        // Detect cloud environment (e.g. Vercel, Render)
+        this.isCloud = Boolean(
+            window.location.hostname && 
+            !["localhost", "127.0.0.1", "::1", ""].includes(window.location.hostname)
+        );
+
+        if (this.isCloud) {
+            this.initCloudBridge();
+        } else {
+            this.initConnection();
+        }
+    }
+
+    async initCloudBridge() {
+        console.log("[DataBridge] Cloud deployment detected. Activating Cloud HTTP Bridge...");
+        await this.checkCloudHealth();
+        // Periodic telemetry sync
+        setInterval(() => this.checkCloudHealth(), 20000);
+    }
+
+    async checkCloudHealth() {
+        try {
+            const res = await fetch("/health");
+            if (res.ok) {
+                this.isConnected = true;
+                if (this.onConnectionChange) {
+                    this.onConnectionChange(true, "CLOUD LINK: ACTIVE");
+                } else {
+                    const el = document.getElementById("hud-ws-status");
+                    if (el) {
+                        el.textContent = "CLOUD LINK: ACTIVE";
+                        el.className = "status-tag ok";
+                    }
+                }
+                if (window.HUDManager) {
+                    window.HUDManager.updateSystemTelemetry(8, 14, "CLOUD LINKED");
+                }
+            } else {
+                throw new Error("HTTP " + res.status);
+            }
+        } catch (e) {
+            this.isConnected = false;
+            if (this.onConnectionChange) {
+                this.onConnectionChange(false, "CLOUD LINK: RETRYING");
+            } else {
+                const el = document.getElementById("hud-ws-status");
+                if (el) {
+                    el.textContent = "CLOUD LINK: RETRYING";
+                    el.className = "status-tag alert";
+                }
+            }
+        }
     }
 
     getWebSocketUrl() {

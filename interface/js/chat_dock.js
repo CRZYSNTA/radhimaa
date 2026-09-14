@@ -24,6 +24,16 @@ class ChatDockManager {
         this.currentStreamingText = "";
         this.pendingConfirmation = null;
         this.isMinimized = false;
+
+        // Authentication token resolution (URL query > localStorage > sessionStorage > default)
+        const urlParams = typeof window !== "undefined" && window.location ? new URLSearchParams(window.location.search) : null;
+        this.authToken = (urlParams && (urlParams.get("token") || urlParams.get("auth"))) ||
+                         (typeof localStorage !== "undefined" && localStorage.getItem("jarvis_auth_token")) ||
+                         (typeof sessionStorage !== "undefined" && sessionStorage.getItem("jarvis_token")) ||
+                         "naanthaandaleo";
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem("jarvis_auth_token", this.authToken);
+        }
     }
 
     init() {
@@ -212,6 +222,20 @@ class ChatDockManager {
         if (!text) return;
 
         this.chatInput.value = "";
+
+        // Client-side authentication command: /auth <token>
+        if (text.startsWith("/auth ")) {
+            const newToken = text.substring(6).trim();
+            if (newToken) {
+                this.authToken = newToken;
+                if (typeof localStorage !== "undefined") localStorage.setItem("jarvis_auth_token", newToken);
+                if (typeof sessionStorage !== "undefined") sessionStorage.setItem("jarvis_token", newToken);
+                this.appendUserMessage(text);
+                this.appendAssistantMessage("Security access token updated successfully, sir. Cloud neural link authenticated.");
+                return;
+            }
+        }
+
         this.appendUserMessage(text);
 
         // Update HUD state to THINKING
@@ -279,18 +303,77 @@ class ChatDockManager {
         const payload = {
             conversation_id: this.conversationId,
             message: message,
+            text: message,
             confirmed: false
         };
 
+        const headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream"
+        };
+        if (this.authToken) {
+            headers["X-JARVIS-Token"] = this.authToken;
+            headers["Authorization"] = `Bearer ${this.authToken}`;
+        }
+
         try {
-            const response = await fetch("/v1/chat/stream", {
+            let response = await fetch("/v1/chat/stream", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream"
-                },
+                headers: headers,
                 body: JSON.stringify(payload)
             });
+
+            // If streaming route is unavailable (404/405), fallback to non-streaming POST /v1/chat or /ask
+            if (response.status === 404 || response.status === 405) {
+                console.log("[ChatDock] /v1/chat/stream not supported, falling back to /v1/chat or /ask...");
+                const nonStreamHeaders = Object.assign({}, headers);
+                delete nonStreamHeaders["Accept"];
+                response = await fetch("/v1/chat", {
+                    method: "POST",
+                    headers: nonStreamHeaders,
+                    body: JSON.stringify(payload)
+                });
+                if (response.status === 404) {
+                    response = await fetch("/ask", {
+                        method: "POST",
+                        headers: nonStreamHeaders,
+                        body: JSON.stringify({ text: message, message: message })
+                    });
+                }
+                if (response.status === 401 || response.status === 403) {
+                    if (textSpan) {
+                        textSpan.innerHTML = `Access Denied: Security Token Required.<br><small style="color: var(--jarvis-primary);">Type <code style="background: rgba(255,122,0,0.2); padding: 2px 4px; border-radius: 2px;">/auth &lt;token&gt;</code> to authenticate.</small>`;
+                    }
+                    if (cursor) cursor.remove();
+                    if (window.StateManager) window.StateManager.setState("ERROR", "Auth required.");
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                const data = await response.json();
+                const reply = data.reply || data.response || data.text || "Neural core online, sir.";
+                if (textSpan) textSpan.textContent = reply;
+                if (cursor) cursor.remove();
+                if (window.StateManager) {
+                    window.StateManager.setState("SPEAKING", "Response formulated.");
+                    setTimeout(() => {
+                        if (window.StateManager.currentState === "SPEAKING") {
+                            window.StateManager.setState("IDLE", "Standing by.");
+                        }
+                    }, 2000);
+                }
+                return;
+            }
+
+            if (response.status === 401 || response.status === 403) {
+                if (textSpan) {
+                    textSpan.innerHTML = `Access Denied: Security Token Required.<br><small style="color: var(--jarvis-primary);">Type <code style="background: rgba(255,122,0,0.2); padding: 2px 4px; border-radius: 2px;">/auth &lt;token&gt;</code> to authenticate.</small>`;
+                }
+                if (cursor) cursor.remove();
+                if (window.StateManager) window.StateManager.setState("ERROR", "Auth required.");
+                return;
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP error ${response.status}`);

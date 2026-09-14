@@ -45,7 +45,7 @@ class OrbitalRings {
         }
 
         const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = new THREE.LineSegmentsMaterial({
+        const mat = new THREE.LineBasicMaterial({
             color: 0xff8800,
             transparent: true,
             opacity: opacity,
