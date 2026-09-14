@@ -34,6 +34,13 @@ class ChatDockManager {
         if (typeof localStorage !== "undefined") {
             localStorage.setItem("jarvis_auth_token", this.authToken);
         }
+
+        // Web Speech API Subsystems (STT & TTS)
+        this.speechEnabled = true;
+        this.isListening = false;
+        this.recognition = null;
+        this.speechSynthesis = typeof window !== "undefined" ? window.speechSynthesis : null;
+        this.speechPulseTimer = null;
     }
 
     init() {
@@ -55,6 +62,7 @@ class ChatDockManager {
 
         this.bindEvents();
         this.syncStateListeners();
+        this.initSpeechEngine();
         console.log("[ChatDock] Initialized with conversation ID:", this.conversationId);
     }
 
@@ -93,15 +101,22 @@ class ChatDockManager {
             this.confirmRejectBtn.addEventListener("click", () => this.handleConfirmation(false));
         }
 
-        // Mic Pill Click (click-to-speak toggle)
+        // Mic Pill & Mic Button Click (click-to-speak toggle)
         const micToggle = document.getElementById("mic-toggle-btn");
         if (micToggle) {
-            micToggle.addEventListener("click", () => {
-                if (window.JarvisWS && window.JarvisWS.isConnected) {
+            micToggle.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.toggleListening();
+                if (window.JarvisWS && window.JarvisWS.isConnected && !window.JarvisWS.isCloud) {
                     window.JarvisWS.send("toggle_mic", {});
-                } else {
-                    fetch("/v1/voice/toggle", { method: "POST" }).catch(() => {});
                 }
+            });
+        }
+        if (this.micPill) {
+            this.micPill.style.cursor = "pointer";
+            this.micPill.title = "Click to talk / Hold Home key to speak";
+            this.micPill.addEventListener("click", () => {
+                this.toggleListening();
             });
         }
 
@@ -203,6 +218,243 @@ class ChatDockManager {
                     this.showConfirmationModal(data.tool, data.arguments || {}, data.conversation_id || this.conversationId);
                 }
             });
+        }
+    }
+
+    initSpeechEngine() {
+        const SpeechRecognition = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+        if (SpeechRecognition) {
+            try {
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = false;
+                this.recognition.interimResults = true;
+                this.recognition.lang = "en-US";
+
+                this.recognition.onstart = () => {
+                    this.isListening = true;
+                    if (window.StateManager) {
+                        window.StateManager.setState("LISTENING", "Capturing voice command...");
+                    }
+                    if (this.micStateLabel) {
+                        this.micStateLabel.textContent = "LISTENING";
+                        this.micStateLabel.className = "mic-status-badge state-listening";
+                    }
+                    if (this.micPill) {
+                        this.micPill.className = "hud-mic-pill active-listening";
+                    }
+                };
+
+                this.recognition.onresult = (event) => {
+                    let interimTranscript = "";
+                    let finalTranscript = "";
+
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            interimTranscript += event.results[i][0].transcript;
+                        }
+                    }
+
+                    const currentWords = (finalTranscript || interimTranscript).trim();
+                    if (this.chatInput && currentWords) {
+                        this.chatInput.value = currentWords;
+                    }
+
+                    if (this.micRmsFill) {
+                        const fakeLevel = Math.min(100, Math.round(30 + Math.random() * 60));
+                        this.micRmsFill.style.width = `${fakeLevel}%`;
+                    }
+                    if (window.AudioEngine) {
+                        window.AudioEngine.setBackendLevel(0.4 + Math.random() * 0.4);
+                    }
+
+                    if (finalTranscript) {
+                        if (this.micPill) {
+                            this.micPill.className = "hud-mic-pill active-thinking";
+                        }
+                        this.handleSendMessage();
+                    }
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.info("[Voice] Web Speech notice:", event.error);
+                    this.isListening = false;
+                    if (window.StateManager && window.StateManager.currentState === "LISTENING") {
+                        window.StateManager.setState("IDLE", "Standing by.");
+                    }
+                    if (this.micStateLabel) {
+                        this.micStateLabel.textContent = "IDLE";
+                        this.micStateLabel.className = "mic-status-badge state-idle";
+                    }
+                    if (this.micPill) {
+                        this.micPill.className = "hud-mic-pill";
+                    }
+                    if (this.micRmsFill) this.micRmsFill.style.width = "0%";
+                };
+
+                this.recognition.onend = () => {
+                    this.isListening = false;
+                    if (this.micStateLabel) {
+                        this.micStateLabel.textContent = "IDLE";
+                        this.micStateLabel.className = "mic-status-badge state-idle";
+                    }
+                    if (this.micPill) {
+                        this.micPill.className = "hud-mic-pill";
+                    }
+                    if (this.micRmsFill) this.micRmsFill.style.width = "0%";
+                    if (window.StateManager && window.StateManager.currentState === "LISTENING") {
+                        window.StateManager.setState("IDLE", "Standing by.");
+                    }
+                };
+                console.log("[Voice] Browser speech recognition subsystem initialized.");
+            } catch (e) {
+                console.warn("[Voice] Speech recognition initialization notice:", e);
+            }
+        }
+
+        // Global Home Key Push-To-Talk
+        if (typeof window !== "undefined") {
+            window.addEventListener("keydown", (e) => {
+                if (e.key === "Home" && !e.repeat && document.activeElement !== this.chatInput) {
+                    e.preventDefault();
+                    this.startListening();
+                }
+            });
+
+            window.addEventListener("keyup", (e) => {
+                if (e.key === "Home" && this.isListening) {
+                    e.preventDefault();
+                    this.stopListening();
+                }
+            });
+        }
+    }
+
+    startListening() {
+        if (!this.recognition) {
+            console.info("[Voice] Web Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.");
+            this.appendAssistantMessage("Voice capture requires Chrome, Edge, or a Web Speech API browser, sir.");
+            return;
+        }
+        if (this.isListening) return;
+
+        try {
+            if (this.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            this.recognition.start();
+        } catch (e) {
+            console.debug("[Voice] Speech recognition start exception:", e);
+        }
+    }
+
+    stopListening() {
+        if (this.recognition && this.isListening) {
+            try {
+                this.recognition.stop();
+            } catch (e) {}
+        }
+    }
+
+    toggleListening() {
+        if (this.isListening) {
+            this.stopListening();
+        } else {
+            this.startListening();
+        }
+    }
+
+    speak(text) {
+        if (!this.speechEnabled || typeof window === "undefined" || !("speechSynthesis" in window) || !text) return;
+
+        try {
+            window.speechSynthesis.cancel();
+            if (this.speechPulseTimer) {
+                clearInterval(this.speechPulseTimer);
+                this.speechPulseTimer = null;
+            }
+
+            // Clean text for speech: strip URLs, markdown symbols, tool tags, brackets
+            let clean = text
+                .replace(/https?:\/\/\S+/g, "")
+                .replace(/<[^>]+>/g, "")
+                .replace(/[*#_`~]/g, "")
+                .replace(/\[TOOL\][^\n]+/g, "")
+                .replace(/\{[^}]+\}/g, "")
+                .trim();
+
+            if (!clean) return;
+
+            const utterance = new SpeechSynthesisUtterance(clean);
+            utterance.rate = 1.02;
+            utterance.pitch = 0.96;
+
+            const voices = window.speechSynthesis.getVoices();
+            const preferredVoice = voices.find(v => 
+                v.lang.startsWith("en") && 
+                (v.name.includes("UK") || v.name.includes("British") || v.name.includes("George") || v.name.includes("David") || v.name.includes("Daniel") || v.name.includes("Male") || v.name.includes("Natural"))
+            ) || voices.find(v => v.lang.startsWith("en"));
+
+            if (preferredVoice) {
+                utterance.voice = preferredVoice;
+            }
+
+            utterance.onstart = () => {
+                if (window.StateManager) {
+                    window.StateManager.setState("SPEAKING", "Formulating vocal response...");
+                }
+                if (this.micPill) {
+                    this.micPill.className = "hud-mic-pill active-speaking";
+                }
+                if (this.micStateLabel) {
+                    this.micStateLabel.textContent = "SPEAKING";
+                    this.micStateLabel.className = "mic-status-badge state-speaking";
+                }
+                if (window.HUDManager) {
+                    window.HUDManager.showAssistantText(clean);
+                }
+
+                // Animate waveform while speaking
+                this.speechPulseTimer = setInterval(() => {
+                    if (window.speechSynthesis && window.speechSynthesis.speaking) {
+                        if (window.AudioEngine) {
+                            window.AudioEngine.setBackendLevel(0.4 + Math.random() * 0.45);
+                        }
+                    } else {
+                        if (this.speechPulseTimer) {
+                            clearInterval(this.speechPulseTimer);
+                            this.speechPulseTimer = null;
+                        }
+                    }
+                }, 100);
+            };
+
+            const finalizeSpeaking = () => {
+                if (this.speechPulseTimer) {
+                    clearInterval(this.speechPulseTimer);
+                    this.speechPulseTimer = null;
+                }
+                if (this.micPill) {
+                    this.micPill.className = "hud-mic-pill";
+                }
+                if (this.micStateLabel) {
+                    this.micStateLabel.textContent = "IDLE";
+                    this.micStateLabel.className = "mic-status-badge state-idle";
+                }
+                setTimeout(() => {
+                    if (window.StateManager && window.StateManager.currentState === "SPEAKING") {
+                        window.StateManager.setState("IDLE", "Standing by.");
+                    }
+                }, 1000);
+            };
+
+            utterance.onend = finalizeSpeaking;
+            utterance.onerror = finalizeSpeaking;
+
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            console.warn("[Voice] Speech synthesis notice:", e);
         }
     }
 
@@ -355,14 +607,7 @@ class ChatDockManager {
                 const reply = data.reply || data.response || data.text || "Neural core online, sir.";
                 if (textSpan) textSpan.textContent = reply;
                 if (cursor) cursor.remove();
-                if (window.StateManager) {
-                    window.StateManager.setState("SPEAKING", "Response formulated.");
-                    setTimeout(() => {
-                        if (window.StateManager.currentState === "SPEAKING") {
-                            window.StateManager.setState("IDLE", "Standing by.");
-                        }
-                    }, 2000);
-                }
+                this.speak(reply);
                 return;
             }
 
@@ -418,13 +663,8 @@ class ChatDockManager {
             }
 
             if (cursor) cursor.remove();
-            if (window.StateManager) {
-                window.StateManager.setState("SPEAKING", "Response formulated.");
-                setTimeout(() => {
-                    if (window.StateManager.currentState === "SPEAKING") {
-                        window.StateManager.setState("IDLE", "Standing by.");
-                    }
-                }, 2000);
+            if (accumulated) {
+                this.speak(accumulated);
             }
         } catch (err) {
             console.error("[ChatDock] Streaming failed:", err);
