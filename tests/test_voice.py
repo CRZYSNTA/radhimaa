@@ -79,4 +79,21 @@ def test_microphone_selection_excludes_loopback():
         bad_keywords = ["stereo mix", "wave out", "what u hear", "loopback"]
         assert not any(bad in selected_name for bad in bad_keywords)
 
+def test_fish_audio_config():
+    import config
+    assert hasattr(config, "FISH_AUDIO_API_KEY")
+    assert hasattr(config, "TTS_ENGINE")
+    assert config.TTS_ENGINE == "fish_audio"
+
+def test_format_speech_text():
+    from voice.text_to_speech import format_speech_text
+    raw = "Here is the plan: **Step 1** [Click here](https://google.com) `run_command` at 08:30 with 50% battery."
+    cleaned = format_speech_text(raw)
+    assert "https" not in cleaned
+    assert "**" not in cleaned
+    assert "`" not in cleaned
+    assert "Click here" in cleaned
+    assert "percent" in cleaned
+
+
 

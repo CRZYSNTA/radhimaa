@@ -365,11 +365,17 @@ class ChatDockManager {
         }
     }
 
-    speak(text) {
-        if (!this.speechEnabled || typeof window === "undefined" || !("speechSynthesis" in window) || !text) return;
+    speak(text, audioB64 = null) {
+        if (!this.speechEnabled || typeof window === "undefined" || !text) return;
 
         try {
-            window.speechSynthesis.cancel();
+            if (this.currentAudio) {
+                try { this.currentAudio.pause(); } catch(e){}
+                this.currentAudio = null;
+            }
+            if ("speechSynthesis" in window) {
+                window.speechSynthesis.cancel();
+            }
             if (this.speechPulseTimer) {
                 clearInterval(this.speechPulseTimer);
                 this.speechPulseTimer = null;
@@ -386,21 +392,7 @@ class ChatDockManager {
 
             if (!clean) return;
 
-            const utterance = new SpeechSynthesisUtterance(clean);
-            utterance.rate = 1.02;
-            utterance.pitch = 0.96;
-
-            const voices = window.speechSynthesis.getVoices();
-            const preferredVoice = voices.find(v => 
-                v.lang.startsWith("en") && 
-                (v.name.includes("UK") || v.name.includes("British") || v.name.includes("George") || v.name.includes("David") || v.name.includes("Daniel") || v.name.includes("Male") || v.name.includes("Natural"))
-            ) || voices.find(v => v.lang.startsWith("en"));
-
-            if (preferredVoice) {
-                utterance.voice = preferredVoice;
-            }
-
-            utterance.onstart = () => {
+            const onStartSpeaking = () => {
                 if (window.StateManager) {
                     window.StateManager.setState("SPEAKING", "Formulating vocal response...");
                 }
@@ -417,15 +409,8 @@ class ChatDockManager {
 
                 // Animate waveform while speaking
                 this.speechPulseTimer = setInterval(() => {
-                    if (window.speechSynthesis && window.speechSynthesis.speaking) {
-                        if (window.AudioEngine) {
-                            window.AudioEngine.setBackendLevel(0.4 + Math.random() * 0.45);
-                        }
-                    } else {
-                        if (this.speechPulseTimer) {
-                            clearInterval(this.speechPulseTimer);
-                            this.speechPulseTimer = null;
-                        }
+                    if (window.AudioEngine) {
+                        window.AudioEngine.setBackendLevel(0.4 + Math.random() * 0.45);
                     }
                 }, 100);
             };
@@ -449,13 +434,56 @@ class ChatDockManager {
                 }, 1000);
             };
 
-            utterance.onend = finalizeSpeaking;
-            utterance.onerror = finalizeSpeaking;
+            // If Fish Audio / server audio_b64 is present, play directly
+            if (audioB64) {
+                try {
+                    const audio = new Audio("data:audio/mp3;base64," + audioB64);
+                    this.currentAudio = audio;
+                    audio.onplay = onStartSpeaking;
+                    audio.onended = () => {
+                        this.currentAudio = null;
+                        finalizeSpeaking();
+                    };
+                    audio.onerror = () => {
+                        this.currentAudio = null;
+                        this.fallbackBrowserSpeech(clean, onStartSpeaking, finalizeSpeaking);
+                    };
+                    audio.play().catch(() => {
+                        this.fallbackBrowserSpeech(clean, onStartSpeaking, finalizeSpeaking);
+                    });
+                    return;
+                } catch (e) {
+                    console.debug("[Voice] Audio play error, falling back to browser speech synthesis:", e);
+                }
+            }
 
-            window.speechSynthesis.speak(utterance);
+            this.fallbackBrowserSpeech(clean, onStartSpeaking, finalizeSpeaking);
         } catch (e) {
             console.warn("[Voice] Speech synthesis notice:", e);
         }
+    }
+
+    fallbackBrowserSpeech(clean, onStartSpeaking, finalizeSpeaking) {
+        if (!("speechSynthesis" in window)) return;
+        const utterance = new SpeechSynthesisUtterance(clean);
+        utterance.rate = 1.02;
+        utterance.pitch = 0.96;
+
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => 
+            v.lang.startsWith("en") && 
+            (v.name.includes("UK") || v.name.includes("British") || v.name.includes("George") || v.name.includes("David") || v.name.includes("Daniel") || v.name.includes("Male") || v.name.includes("Natural"))
+        ) || voices.find(v => v.lang.startsWith("en"));
+
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+
+        utterance.onstart = onStartSpeaking;
+        utterance.onend = finalizeSpeaking;
+        utterance.onerror = finalizeSpeaking;
+
+        window.speechSynthesis.speak(utterance);
     }
 
     updateMicBadge(state, details = "") {
@@ -607,7 +635,7 @@ class ChatDockManager {
                 const reply = data.reply || data.response || data.text || "Neural core online, sir.";
                 if (textSpan) textSpan.textContent = reply;
                 if (cursor) cursor.remove();
-                this.speak(reply);
+                this.speak(reply, data.audio_b64);
                 return;
             }
 
@@ -627,6 +655,7 @@ class ChatDockManager {
             const reader = response.body.getReader();
             const decoder = new TextDecoder("utf-8");
             let buffer = "";
+            let streamAudioB64 = null;
 
             while (true) {
                 const { value, done } = await reader.read();
@@ -654,6 +683,9 @@ class ChatDockManager {
                                     accumulated = data.content;
                                     if (textSpan) textSpan.textContent = accumulated;
                                 }
+                                if (data.audio_b64) {
+                                    streamAudioB64 = data.audio_b64;
+                                }
                             }
                         } catch (err) {
                             console.debug("[ChatDock] SSE parse skip:", trimmed);
@@ -664,7 +696,7 @@ class ChatDockManager {
 
             if (cursor) cursor.remove();
             if (accumulated) {
-                this.speak(accumulated);
+                this.speak(accumulated, streamAudioB64);
             }
         } catch (err) {
             console.error("[ChatDock] Streaming failed:", err);

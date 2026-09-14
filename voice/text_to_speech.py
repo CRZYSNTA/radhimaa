@@ -172,32 +172,64 @@ class TTSWorker:
 
             synthesized = False
 
-            # 1. ElevenLabs Adam (pNInz6obpgDQGcFmaJgB) if API key is present
-            el_key = os.environ.get("ELEVENLABS_API_KEY")
-            if el_key:
+            # 1. Fish Audio AI (Tier-1) if API key is present
+            fish_key = os.environ.get("FISH_AUDIO_API_KEY") or getattr(config, "FISH_AUDIO_API_KEY", "")
+            tts_engine = getattr(config, "TTS_ENGINE", "fish_audio").lower()
+            if fish_key and tts_engine in ("fish_audio", "fish", "auto"):
                 try:
-                    voice_id = getattr(config, "ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")
-                    model_id = getattr(config, "ELEVENLABS_MODEL", "eleven_turbo_v2_5")
-                    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                    url = "https://api.fish.audio/v1/tts"
                     headers = {
-                        "xi-api-key": el_key,
+                        "Authorization": f"Bearer {fish_key}",
                         "Content-Type": "application/json"
                     }
                     payload = {
                         "text": spoken_text,
-                        "model_id": model_id,
-                        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+                        "format": "mp3"
                     }
+                    voice_id = os.environ.get("FISH_AUDIO_VOICE_ID") or getattr(config, "FISH_AUDIO_VOICE_ID", "")
+                    if voice_id:
+                        payload["reference_id"] = voice_id
+
                     resp = requests.post(url, json=payload, headers=headers, timeout=8)
                     if resp.status_code == 200:
                         with open(audio_file, "wb") as f:
                             f.write(resp.content)
                         synthesized = True
-                        logger.info("[TTS] ElevenLabs Adam voice synthesis succeeded.")
+                        logger.info("[TTS] Fish Audio AI voice synthesis succeeded.")
+                    elif resp.status_code == 402:
+                        logger.warning("[TTS Fish Audio Notice]: Insufficient API credit (HTTP 402). Falling back to secondary engine.")
+                    else:
+                        logger.warning(f"[TTS Fish Audio Notice]: HTTP {resp.status_code} - {resp.text[:100]}. Falling back.")
                 except Exception as e:
-                    logger.warning(f"[TTS ElevenLabs Notice]: {e}")
+                    logger.warning(f"[TTS Fish Audio Notice]: {e}. Falling back.")
 
-            # 2. Edge-TTS Neural Fallback (RyanNeural / British cadence)
+            # 2. ElevenLabs Adam (pNInz6obpgDQGcFmaJgB) if API key is present
+            if not synthesized:
+                el_key = os.environ.get("ELEVENLABS_API_KEY")
+                if el_key:
+                    try:
+                        voice_id = getattr(config, "ELEVENLABS_VOICE_ID", "pNInz6obpgDQGcFmaJgB")
+                        model_id = getattr(config, "ELEVENLABS_MODEL", "eleven_turbo_v2_5")
+                        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                        headers = {
+                            "xi-api-key": el_key,
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "text": spoken_text,
+                            "model_id": model_id,
+                            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+                        }
+                        resp = requests.post(url, json=payload, headers=headers, timeout=8)
+                        if resp.status_code == 200:
+                            with open(audio_file, "wb") as f:
+                                f.write(resp.content)
+                            synthesized = True
+                            logger.info("[TTS] ElevenLabs Adam voice synthesis succeeded.")
+                    except Exception as e:
+                        logger.warning(f"[TTS ElevenLabs Notice]: {e}")
+
+            # 3. Edge-TTS Neural Fallback (RyanNeural / British cadence)
             if not synthesized:
                 voice_name = getattr(config, "JARVIS_VOICE", "en-GB-RyanNeural")
                 async def _generate():

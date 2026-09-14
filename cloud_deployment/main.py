@@ -16,6 +16,7 @@ import os
 import time
 import json
 import sqlite3
+import base64
 import requests
 from collections import defaultdict
 from typing import Optional, List, Dict, Any
@@ -372,13 +373,36 @@ def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str =
     reply = process_query_with_memory(payload.get_query())
     return {"reply": reply, "response": reply}
 
+def synthesize_fish_audio(text: str) -> Optional[str]:
+    fish_key = os.environ.get("FISH_AUDIO_API_KEY", "")
+    if not fish_key or not text:
+        return None
+    try:
+        url = "https://api.fish.audio/v1/tts"
+        headers = {
+            "Authorization": f"Bearer {fish_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {"text": text[:500], "format": "mp3"}
+        voice_id = os.environ.get("FISH_AUDIO_VOICE_ID", "")
+        if voice_id:
+            payload["reference_id"] = voice_id
+        resp = requests.post(url, json=payload, headers=headers, timeout=5)
+        if resp.status_code == 200 and resp.content:
+            return base64.b64encode(resp.content).decode("utf-8")
+    except Exception:
+        pass
+    return None
+
 @app.post("/v1/chat")
 def v1_chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: Optional[str] = Header(None)):
     verify_auth(request, x_jarvis_token)
     reply = process_query_with_memory(payload.get_query())
+    audio_b64 = synthesize_fish_audio(reply)
     return {
         "reply": reply,
         "response": reply,
+        "audio_b64": audio_b64,
         "conversation_id": payload.conversation_id or "conv-cloud",
         "tool_events": []
     }
@@ -394,7 +418,8 @@ async def v1_chat_stream_endpoint(payload: UnifiedQuery, request: Request, x_jar
         for i, word in enumerate(words):
             chunk = word + (" " if i < len(words) - 1 else "")
             yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'content': reply, 'audio_b64': None})}\n\n"
+        audio_b64 = synthesize_fish_audio(reply)
+        yield f"data: {json.dumps({'type': 'done', 'content': reply, 'audio_b64': audio_b64})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
