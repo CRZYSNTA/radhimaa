@@ -217,6 +217,9 @@ def setup_wireless_adb() -> str:
             "'connect wireless phone <ip>'."
         )
 
+# Alias for tool consistency
+setup_wireless_phone = setup_wireless_adb
+
 
 def auto_reconnect_wireless() -> bool:
     """Attempts automatic reconnection using saved wireless IP if no device is active."""
