@@ -190,11 +190,17 @@ class ToolExecutor:
         self.tools["pair_mobile"] = lambda p: pair_mobile()
         self.tools["list_paired_devices"] = lambda p: list_paired_devices()
         self.tools["revoke_mobile_device"] = lambda p: revoke_mobile_device(p.get("device_id", ""))
-        from tools.phone_controller import unlock_phone, lock_phone, setup_wireless_adb, connect_wireless_phone
+        from tools.phone_controller import (
+            unlock_phone, lock_phone, setup_wireless_adb, connect_wireless_phone,
+            open_phone_app, play_phone_youtube, send_phone_whatsapp
+        )
         self.tools["unlock_phone"] = lambda p: unlock_phone(p.get("pin"))
         self.tools["lock_phone"] = lambda p: lock_phone()
         self.tools["setup_wireless_phone"] = lambda p: setup_wireless_adb()
         self.tools["connect_wireless_phone"] = lambda p: connect_wireless_phone(p.get("ip", ""), int(p.get("port", 5555)))
+        self.tools["open_phone_app"] = lambda p: open_phone_app(p.get("app_name", "") or p.get("name", "") or p.get("app", ""))
+        self.tools["play_phone_youtube"] = lambda p: play_phone_youtube(p.get("query", "") or p.get("song", "") or "")
+        self.tools["send_phone_whatsapp"] = lambda p: send_phone_whatsapp(p.get("recipient", "") or p.get("to", ""), p.get("message", "") or p.get("text", ""))
 
         # Smart TV Controller
         from tools.tv_controller import (

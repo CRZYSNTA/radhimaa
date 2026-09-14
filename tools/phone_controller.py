@@ -386,3 +386,113 @@ def lock_phone() -> str:
 
     subprocess.run([adb, "-s", devices[0], "shell", "input", "keyevent", "26"], capture_output=True, timeout=10)
     return "Phone locked and display turned off, sir."
+
+
+ANDROID_APP_PACKAGES = {
+    "whatsapp": "com.whatsapp",
+    "youtube": "com.google.android.youtube",
+    "chrome": "com.android.chrome",
+    "camera": "com.android.camera",
+    "spotify": "com.spotify.music",
+    "instagram": "com.instagram.android",
+    "telegram": "org.telegram.messenger",
+    "maps": "com.google.android.apps.maps",
+    "settings": "com.android.settings",
+    "calculator": "com.google.android.calculator",
+    "clock": "com.google.android.deskclock",
+}
+
+
+def open_phone_app(app_name: str) -> str:
+    """Launches an app on connected Android phone."""
+    adb = get_adb_path()
+    if not adb:
+        return "ADB not found."
+
+    auto_reconnect_wireless()
+    devices = get_connected_devices()
+    if not devices:
+        return "No Android device detected."
+
+    device_id = devices[0]
+    clean_app = app_name.lower().strip()
+    pkg = ANDROID_APP_PACKAGES.get(clean_app)
+
+    try:
+        if clean_app == "youtube":
+            subprocess.run([adb, "-s", device_id, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", "https://www.youtube.com"], capture_output=True, timeout=10)
+            return "Opened YouTube on your phone, sir."
+        elif clean_app == "camera":
+            subprocess.run([adb, "-s", device_id, "shell", "am", "start", "-a", "android.media.action.STILL_IMAGE_CAMERA"], capture_output=True, timeout=10)
+            return "Opened Camera on your phone, sir."
+        elif pkg:
+            subprocess.run([adb, "-s", device_id, "shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], capture_output=True, timeout=10)
+            return f"Opened {clean_app.title()} on your phone, sir."
+        else:
+            subprocess.run([adb, "-s", device_id, "shell", "monkey", "-p", clean_app, "-c", "android.intent.category.LAUNCHER", "1"], capture_output=True, timeout=10)
+            return f"Launched {app_name} on your phone, sir."
+    except Exception as e:
+        logger.error(f"[Phone App Launch Error]: {e}")
+        return f"Unable to open {app_name} on phone: {e}"
+
+
+def play_phone_youtube(query: str = "") -> str:
+    """Searches and opens a YouTube video directly on the phone."""
+    adb = get_adb_path()
+    if not adb:
+        return "ADB not found."
+
+    auto_reconnect_wireless()
+    devices = get_connected_devices()
+    if not devices:
+        return "No Android device detected."
+
+    device_id = devices[0]
+    clean_q = (query or "").strip()
+
+    try:
+        import urllib.parse
+        if clean_q:
+            encoded = urllib.parse.quote(clean_q)
+            url = f"https://www.youtube.com/results?search_query={encoded}"
+        else:
+            url = "https://www.youtube.com"
+
+        subprocess.run([adb, "-s", device_id, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url], capture_output=True, timeout=10)
+        target = f"'{clean_q}'" if clean_q else "YouTube"
+        return f"Playing {target} on your phone, sir."
+    except Exception as e:
+        logger.error(f"[Phone YouTube Error]: {e}")
+        return f"Unable to play YouTube on phone: {e}"
+
+
+def send_phone_whatsapp(recipient: str = "", message: str = "") -> str:
+    """Opens WhatsApp on the phone with message drafted."""
+    adb = get_adb_path()
+    if not adb:
+        return "ADB not found."
+
+    auto_reconnect_wireless()
+    devices = get_connected_devices()
+    if not devices:
+        return "No Android device detected."
+
+    device_id = devices[0]
+    clean_num = re.sub(r"[^\d+]", "", recipient or "")
+
+    try:
+        import urllib.parse
+        encoded_msg = urllib.parse.quote(message or "")
+        if len(clean_num) >= 7:
+            url = f"https://api.whatsapp.com/send?phone={clean_num}&text={encoded_msg}"
+        elif encoded_msg:
+            url = f"https://api.whatsapp.com/send?text={encoded_msg}"
+        else:
+            return open_phone_app("whatsapp")
+
+        subprocess.run([adb, "-s", device_id, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url], capture_output=True, timeout=10)
+        target = f" for {recipient}" if recipient else ""
+        return f"Opening WhatsApp on your phone with message drafted{target}, sir."
+    except Exception as e:
+        logger.error(f"[Phone WhatsApp Error]: {e}")
+        return f"Unable to dispatch WhatsApp on phone: {e}"

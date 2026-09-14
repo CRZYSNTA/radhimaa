@@ -131,6 +131,9 @@ TOOL_PERMISSIONS: Dict[str, PermissionLevel] = {
     "lock_phone": PermissionLevel.SAFE,
     "setup_wireless_phone": PermissionLevel.SAFE,
     "connect_wireless_phone": PermissionLevel.SAFE,
+    "open_phone_app": PermissionLevel.SAFE,
+    "play_phone_youtube": PermissionLevel.SAFE,
+    "send_phone_whatsapp": PermissionLevel.SAFE,
 
     # Smart TV Control
     "discover_smart_tvs": PermissionLevel.SAFE,

@@ -52,6 +52,35 @@ def route_intent(user_query: str) -> dict:
         return {"type": "SIMPLE", "tool": "set_volume", "params": {"action": action}}
 
     # -----------------------------------------------------------------------
+    # Android Phone Hardware Controls (if target is explicitly "on phone" / "on my phone")
+    # Handles: "open whatsapp on my phone", "play animals song on my phone", "open camera on phone"
+    # -----------------------------------------------------------------------
+    is_phone_target = any(p in q for p in ("on my phone", "on phone", "in my phone", "in phone", "to my phone", "to phone"))
+    if is_phone_target:
+        clean_q = re.sub(r'\b(?:on|in|to)\s+(?:my\s+)?phone\b', '', q).strip()
+        # Phone YouTube playback
+        if "youtube" in clean_q or "song" in clean_q or "video" in clean_q or clean_q.startswith("play "):
+            yt_m = re.search(r'^(?:open|play|search|search for|find)\s+(.+?)(?:\s+(?:in|on)\s+youtube)?$', clean_q)
+            sq = yt_m.group(1).strip() if yt_m else clean_q.replace("play", "").replace("youtube", "").strip()
+            return {"type": "SIMPLE", "tool": "play_phone_youtube", "params": {"query": sq}}
+
+        # Phone WhatsApp / messaging
+        if "message" in clean_q or "whatsapp" in clean_q:
+            clean_raw = re.sub(r'\b(?:on|in|to)\s+(?:my\s+)?phone\b', '', user_query, flags=re.IGNORECASE).strip()
+            m = re.search(r'^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?message|send\s+(?:a\s+)?whatsapp|whatsapp)\s+to\s+([^:]+?)[:\s]+(?:saying\s+|that\s+)?(.+)$', clean_raw, re.IGNORECASE)
+            if m:
+                return {"type": "SIMPLE", "tool": "send_phone_whatsapp", "params": {"recipient": m.group(1).strip(), "message": m.group(2).strip()}}
+            m_msg = re.search(r'^(?:send\s+(?:a\s+)?(?:whatsapp\s+)?message|send\s+(?:a\s+)?whatsapp|whatsapp)[:\s]+(.+)$', clean_raw, re.IGNORECASE)
+            if m_msg:
+                return {"type": "SIMPLE", "tool": "send_phone_whatsapp", "params": {"recipient": "", "message": m_msg.group(1).strip()}}
+            return {"type": "SIMPLE", "tool": "open_phone_app", "params": {"app_name": "whatsapp"}}
+
+        # Open any app on phone
+        if clean_q.startswith("open ") or clean_q.startswith("launch "):
+            app_name = re.sub(r'^(?:open|launch)\s+', '', clean_q).strip()
+            return {"type": "SIMPLE", "tool": "open_phone_app", "params": {"app_name": app_name}}
+
+    # -----------------------------------------------------------------------
     # YouTube / Song / Video Playback Fast-Paths
     # Handles: "open animals song in youtube", "play animals song on youtube", "open youtube", etc.
     # -----------------------------------------------------------------------
