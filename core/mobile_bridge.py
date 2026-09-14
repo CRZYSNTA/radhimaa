@@ -20,17 +20,58 @@ from pathlib import Path
 from PIL import Image
 
 import psutil
+import tempfile
+import config
 from memory.database import register_paired_device, validate_device_token, get_paired_devices, revoke_device
 import database
 
 logger = logging.getLogger("JARVIS.MobileBridge")
 
-# In-memory pairing session state
+# Cross-process pairing session file in system temp
+PAIRING_SESSION_FILE = Path(tempfile.gettempdir()) / "jarvis_active_pairing.json"
+
+# In-memory pairing session state cache
 _active_pairing_session: Dict[str, Any] = {
     "pin": None,
     "expires_at": 0.0,
     "created_at": 0.0
 }
+
+def _load_stored_pairing_session() -> Dict[str, Any]:
+    """Loads active pairing session across processes (memory + temp file)."""
+    now = time.time()
+    if _active_pairing_session.get("pin") and now < _active_pairing_session.get("expires_at", 0.0):
+        return _active_pairing_session
+
+    if PAIRING_SESSION_FILE.exists():
+        try:
+            data = json.loads(PAIRING_SESSION_FILE.read_text(encoding="utf-8"))
+            if data.get("pin") and now < data.get("expires_at", 0.0):
+                _active_pairing_session.update(data)
+                return data
+        except Exception:
+            pass
+
+    return {"pin": None, "expires_at": 0.0, "created_at": 0.0}
+
+def _save_stored_pairing_session(pin: str, created_at: float, expires_at: float):
+    """Persists active pairing session across processes."""
+    data = {"pin": str(pin).strip(), "created_at": created_at, "expires_at": expires_at}
+    _active_pairing_session.update(data)
+    try:
+        PAIRING_SESSION_FILE.write_text(json.dumps(data), encoding="utf-8")
+    except Exception as e:
+        logger.debug(f"Could not persist pairing session file: {e}")
+
+def _clear_stored_pairing_session():
+    """Clears active pairing session from memory and disk."""
+    _active_pairing_session["pin"] = None
+    if PAIRING_SESSION_FILE.exists():
+        try:
+            PAIRING_SESSION_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
 
 def get_network_ips() -> List[Dict[str, str]]:
     """Discovers host network interface IPs (Wi-Fi, Ethernet, Tailscale/VPN)."""
@@ -79,9 +120,7 @@ def generate_pairing_session(ttl_seconds: int = 600) -> Dict[str, Any]:
     pin = f"{random.randint(100000, 999999)}"
     now = time.time()
     expires_at = now + ttl_seconds
-    _active_pairing_session["pin"] = pin
-    _active_pairing_session["created_at"] = now
-    _active_pairing_session["expires_at"] = expires_at
+    _save_stored_pairing_session(pin, now, expires_at)
 
     ips = get_network_ips()
     primary_ip = ips[0]["ip"] if ips else "127.0.0.1"
@@ -105,9 +144,10 @@ def generate_pairing_session(ttl_seconds: int = 600) -> Dict[str, Any]:
 
 def get_current_pairing_status() -> Dict[str, Any]:
     """Returns the current active pairing PIN if still valid."""
+    session = _load_stored_pairing_session()
     now = time.time()
-    pin = _active_pairing_session.get("pin")
-    expires_at = _active_pairing_session.get("expires_at", 0.0)
+    pin = session.get("pin")
+    expires_at = session.get("expires_at", 0.0)
     if pin and now < expires_at:
         ips = get_network_ips()
         primary_ip = ips[0]["ip"] if ips else "127.0.0.1"
@@ -130,22 +170,44 @@ def verify_pairing_pin(pin: str, device_name: str = "Mobile Device") -> Optional
     """
     Validates a submitted PIN. If valid, generates a permanent device token,
     registers it in SQLite database, and invalidates the single-use PIN.
+    Supports master auth token as an emergency or zero-config pairing key.
     """
-    now = time.time()
-    active_pin = _active_pairing_session.get("pin")
-    expires_at = _active_pairing_session.get("expires_at", 0.0)
+    clean_pin = str(pin).strip()
+    if not clean_pin:
+        return None
 
-    if not active_pin or str(pin).strip() != str(active_pin).strip():
-        logger.warning(f"Failed pairing attempt with invalid PIN: {pin}")
+    # 1. Master Auth Token check (e.g. naanthaandaleo)
+    master_token = getattr(config, "AUTH_TOKEN", "") or os.environ.get("JARVIS_AUTH_TOKEN", "") or os.environ.get("AUTH_TOKEN", "")
+    if master_token and clean_pin == master_token.strip():
+        token = secrets.token_urlsafe(32)
+        device_id = f"dev_{secrets.token_hex(4)}"
+        reg = register_paired_device(device_id, device_name, token)
+        logger.info(f"Successfully paired mobile device '{device_name}' via master auth token.")
+        return {
+            "success": True,
+            "device_id": device_id,
+            "device_name": device_name,
+            "auth_token": token,
+            "paired_at": reg["paired_at"]
+        }
+
+    # 2. Check active pairing session (memory + persistent session file)
+    session = _load_stored_pairing_session()
+    active_pin = session.get("pin")
+    expires_at = session.get("expires_at", 0.0)
+    now = time.time()
+
+    if not active_pin or clean_pin != str(active_pin).strip():
+        logger.warning(f"Failed pairing attempt with invalid PIN: {clean_pin}")
         return None
 
     if now > expires_at:
-        logger.warning(f"Pairing attempt with expired PIN: {pin}")
-        _active_pairing_session["pin"] = None
+        logger.warning(f"Pairing attempt with expired PIN: {clean_pin}")
+        _clear_stored_pairing_session()
         return None
 
     # Clear active PIN to prevent reuse
-    _active_pairing_session["pin"] = None
+    _clear_stored_pairing_session()
 
     token = secrets.token_urlsafe(32)
     device_id = f"dev_{secrets.token_hex(4)}"
