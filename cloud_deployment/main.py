@@ -18,6 +18,7 @@ import json
 import sqlite3
 import base64
 import requests
+from pathlib import Path
 from collections import defaultdict
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, Query, status
@@ -99,7 +100,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+def get_gemini_api_key() -> str:
+    k = os.environ.get("GEMINI_API_KEY", "")
+    if not k:
+        try:
+            bt_cfg_file = Path("d:/agent/backtalk/backtalk.json")
+            if bt_cfg_file.exists():
+                with open(bt_cfg_file, "r", encoding="utf-8") as f:
+                    k = json.load(f).get("gemini_api_key", "")
+        except Exception:
+            pass
+    return k
+
+GEMINI_API_KEY = get_gemini_api_key()
 
 # Security Parameters
 MAX_MESSAGE_LENGTH = 4000
@@ -143,7 +156,7 @@ def fetch_gemini_ai_response(user_text: str) -> str:
     if not user_text:
         return "I received an empty query, sir."
 
-    q = user_text.lower()
+    q = user_text.lower().strip()
     if "time" in q:
         import datetime
         return f"The current time is {datetime.datetime.now().strftime('%I:%M %p')}."
@@ -158,14 +171,43 @@ def fetch_gemini_ai_response(user_text: str) -> str:
         except Exception:
             pass
 
-    key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
+    # Instant deterministic identity handling
+    if any(p in q for p in ["who am i", "my name", "who is talking", "do you know me"]):
+        return "You are Gowtham, Sir—my creator and operator."
+
+    key = os.environ.get("GEMINI_API_KEY") or get_gemini_api_key()
     if key:
-        models = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.6-flash"]
-        system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. Keep answers brief (1 to 2 sentences max)."
+        # Prioritize high-availability and quota-efficient flash-lite models first
+        models = [
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-3.5-flash",
+            "gemini-3.6-flash"
+        ]
+        system_prompt = (
+            "You are J.A.R.V.I.S., a sophisticated, polite, and loyal AI operating system "
+            "created by and serving Gowtham (whom you address respectfully as Sir or Boss). "
+            "You know that the user speaking to you is Gowtham. "
+            "Keep answers concise, intelligent, and natural (1 to 2 sentences max)."
+        )
+
+        history = get_recent_conversations(4)
+        history_lines = []
+        for h in history:
+            sender = h.get("sender", "User")
+            msg = h.get("message", "").strip()
+            if msg and msg != "undefined":
+                history_lines.append(f"{sender}: {msg}")
+        history_context = ("\n".join(history_lines) + "\n") if history_lines else ""
+
+        full_prompt = f"{system_prompt}\n\n{history_context}User: {user_text}\nJARVIS:"
+
         for model in models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-                payload = {"contents": [{"parts": [{"text": f"{system_prompt}\nUser: {user_text}\nJARVIS:"}]}]}
+                payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
                 res = requests.post(url, json=payload, timeout=6)
                 if res.status_code == 200:
                     data = res.json()
@@ -179,7 +221,10 @@ def fetch_gemini_ai_response(user_text: str) -> str:
             except Exception:
                 pass
 
-    return f"I received your query: '{user_text}'. Brain active, sir!"
+    if any(p in q for p in ["who are you", "what are you", "describe yourself"]):
+        return "I am J.A.R.V.I.S., a Just A Rather Very Intelligent System, designed to manage your technology and assist with your daily operations, Sir."
+
+    return "All core diagnostics operational, Sir. Standing by for your instructions."
 
 def process_query_with_memory(user_text: str) -> str:
     clean_text = user_text if user_text else "hello"
