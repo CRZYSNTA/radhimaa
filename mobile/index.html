@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>JARVIS Mobile Companion</title>
+  <link rel="manifest" href="/mobile/manifest.json">
+  <meta name="theme-color" content="#040810">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="/mobile/icon-192.png">
+  <link rel="stylesheet" href="/mobile/style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="arc-mini"></div>
+      <div class="header-title">JARVIS</div>
+    </div>
+    <div class="header-status">
+      <span class="status-dot disconnected" id="conn-dot"></span>
+      <span id="conn-text">OFFLINE</span>
+      <button id="btn-unpair" style="display: none; background: transparent; border: none; color: #88a4c4; font-size: 1rem; margin-left: 8px; cursor: pointer;" title="Unpair Device">⚙️</button>
+    </div>
+  </header>
+
+  <!-- PWA Install Prompt Banner -->
+  <div class="install-banner" id="install-banner">
+    <span>Install JARVIS on Home Screen</span>
+    <button class="install-btn" id="btn-install-pwa">INSTALL</button>
+  </div>
+
+  <!-- Main View Container -->
+  <main class="main-content">
+
+    <!-- 0. Pairing Screen (Shown when unpaired) -->
+    <div class="pairing-screen" id="view-pairing">
+      <div class="pairing-arc">
+        <div class="pairing-arc-inner"></div>
+      </div>
+      <h2 style="color: var(--accent-cyan); letter-spacing: 2px;">PAIR MOBILE DEVICE</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; max-width: 300px;">
+        Connect to your JARVIS PC host. Enter the 6-digit PIN displayed on your PC screen.
+      </p>
+
+      <div class="card" style="max-width: 340px;">
+        <div class="input-group">
+          <label class="input-label" for="pair-pin">6-DIGIT SECURITY PIN</label>
+          <input type="number" id="pair-pin" class="pin-input" placeholder="000000" maxlength="6" inputmode="numeric">
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="pair-name">DEVICE NAME</label>
+          <input type="text" id="pair-name" class="chat-input" placeholder="My Smartphone" value="Mobile Companion">
+        </div>
+        <button class="btn-hud" id="btn-pair">
+          <span>INITIALIZE PAIRING</span>
+        </button>
+        <p id="pair-error" style="color: var(--accent-red); font-size: 0.8rem; margin-top: 10px; display: none;"></p>
+      </div>
+    </div>
+
+    <!-- 1. Tab: Chat & Voice Assistant -->
+    <div class="tab-pane" id="pane-chat">
+      <!-- Quick Chips -->
+      <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px;">
+        <button class="action-tile" style="padding: 6px 12px; white-space: nowrap; flex-direction: row;" onclick="sendQuickPrompt('Give me my daily briefing')">☀️ Briefing</button>
+        <button class="action-tile" style="padding: 6px 12px; white-space: nowrap; flex-direction: row;" onclick="sendQuickPrompt('Lock PC')">🔒 Lock</button>
+        <button class="action-tile" style="padding: 6px 12px; white-space: nowrap; flex-direction: row;" onclick="sendQuickPrompt('Take a screenshot')">📸 Screenshot</button>
+        <button class="action-tile" style="padding: 6px 12px; white-space: nowrap; flex-direction: row;" onclick="sendQuickPrompt('Clean temp files')">🧹 Clean Temp</button>
+      </div>
+
+      <div class="chat-window" id="chat-history">
+        <div class="chat-bubble jarvis">
+          <span class="speaker">JARVIS</span>
+          Online and paired to your mobile device, sir. Ready for your command.
+        </div>
+      </div>
+
+      <div class="chat-input-bar">
+        <input type="text" id="chat-input" class="chat-input" placeholder="Message or command JARVIS...">
+        <button class="mic-btn" id="btn-mic" title="Voice Input">🎤</button>
+        <button class="mic-btn" id="btn-send" style="border-radius: 20px; width: 44px;" title="Send">➤</button>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 6px;">
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="chk-speech-reply" checked> Voice Responses (TTS)
+        </label>
+        <button id="btn-toggle-voice-modal" class="btn-hud" style="padding: 3px 8px; font-size: 0.7rem; display: flex; align-items: center; gap: 4px;" onclick="toggleVoiceModal()">
+          🎙️ <span id="lbl-active-voice">JARVIS (British)</span> ⚙️
+        </button>
+      </div>
+      <div style="display: flex; justify-content: flex-end; font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
+        <span id="voice-status">Tap mic to speak</span>
+      </div>
+    </div>
+
+    <!-- Mobile Voice Pack Settings Modal -->
+    <div id="modal-voice-pack" class="voice-modal" style="display: none;">
+      <div class="voice-modal-backdrop" onclick="toggleVoiceModal()"></div>
+      <div class="voice-modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(0,240,255,0.2); padding-bottom: 8px;">
+          <h4 style="color: var(--accent-cyan); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">🎙️ MOBILE VOICE PACK SETTINGS</h4>
+          <button class="btn-hud" style="padding: 2px 8px; font-size: 0.75rem;" onclick="toggleVoiceModal()">✕</button>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">SYNTHESIS ENGINE</label>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-engine-neural" class="btn-hud active" style="flex: 1; padding: 6px; font-size: 0.75rem;" onclick="setVoiceEngine('neural')">⚡ Studio Neural (Edge-TTS)</button>
+            <button id="btn-engine-device" class="btn-hud" style="flex: 1; padding: 6px; font-size: 0.75rem;" onclick="setVoiceEngine('device')">📱 Phone System TTS</button>
+          </div>
+        </div>
+
+        <div id="group-neural-voices" style="margin-bottom: 12px;">
+          <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">SELECT NEURAL VOICE PACK</label>
+          <select id="select-neural-voice" class="chat-input" style="width: 100%; padding: 8px; font-size: 0.8rem; background: rgba(15, 23, 42, 0.9); color: var(--text-main); border: 1px solid rgba(0,240,255,0.3); border-radius: 6px;" onchange="onVoiceSelected()">
+            <option value="en-GB-RyanNeural">🇬🇧 JARVIS (British Male - Canonical)</option>
+            <option value="en-GB-SoniaNeural">🇬🇧 F.R.I.D.A.Y. (British Female)</option>
+            <option value="en-US-GuyNeural">🇺🇸 Guy (US Male - Tech Assistant)</option>
+            <option value="en-US-JennyNeural">🇺🇸 Jenny (US Female - Natural)</option>
+            <option value="en-US-ChristopherNeural">🇺🇸 Christopher (US Male - Authoritative)</option>
+            <option value="en-AU-WilliamNeural">🇦🇺 William (Australian Male)</option>
+            <option value="en-IN-PrabhatNeural">🇮🇳 Prabhat (Indian English Male)</option>
+            <option value="en-IN-NeerjaNeural">🇮🇳 Neerja (Indian English Female)</option>
+          </select>
+        </div>
+
+        <div id="group-device-voices" style="margin-bottom: 12px; display: none;">
+          <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">SELECT PHONE DEVICE VOICE</label>
+          <select id="select-device-voice" class="chat-input" style="width: 100%; padding: 8px; font-size: 0.8rem; background: rgba(15, 23, 42, 0.9); color: var(--text-main); border: 1px solid rgba(0,240,255,0.3); border-radius: 6px;" onchange="onVoiceSelected()">
+            <!-- Populated dynamically from window.speechSynthesis -->
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span>Speed:</span>
+              <span id="lbl-voice-speed">1.0x</span>
+            </div>
+            <input type="range" id="slider-voice-speed" min="0.8" max="1.4" step="0.05" value="1.0" style="width: 100%;" oninput="updateVoiceSliderLabels()">
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">
+              <span>Pitch:</span>
+              <span id="lbl-voice-pitch">1.0x</span>
+            </div>
+            <input type="range" id="slider-voice-pitch" min="0.8" max="1.2" step="0.05" value="1.0" style="width: 100%;" oninput="updateVoiceSliderLabels()">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-hud" style="flex: 1; padding: 9px; font-size: 0.75rem;" onclick="testVoicePreview()">▶️ PREVIEW</button>
+          <button class="btn-hud" style="flex: 1.2; padding: 9px; font-size: 0.75rem; background: rgba(0,240,255,0.2);" onclick="saveVoiceSettings()">💾 SAVE & APPLY</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Tab: Remote Control Center -->
+    <div class="tab-pane" id="pane-controls">
+      <!-- Power & Display Card -->
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">SYSTEM POWER & DISPLAY</h4>
+        <div class="grid-3">
+          <div class="action-tile" onclick="execSystemCmd('lock_pc')">
+            <span class="tile-icon">🔒</span>
+            <span class="tile-label">Lock PC</span>
+          </div>
+          <div class="action-tile" onclick="execSystemCmd('toggle_dark_mode')">
+            <span class="tile-icon">🌓</span>
+            <span class="tile-label">Dark Mode</span>
+          </div>
+          <div class="action-tile" onclick="confirmSleep()">
+            <span class="tile-icon">💤</span>
+            <span class="tile-label">Sleep PC</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 14px;">
+          <div class="telemetry-row">
+            <span style="font-size: 0.8rem; color: var(--text-muted);">Brightness</span>
+            <span id="brightness-val" style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-cyan);">70%</span>
+          </div>
+          <input type="range" id="slider-brightness" min="0" max="100" step="1" value="70" style="width: 100%; accent-color: var(--accent-cyan);">
+        </div>
+      </div>
+
+      <!-- Media Controller Card -->
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">MEDIA & VOLUME</h4>
+        <div class="grid-4" style="margin-bottom: 12px;">
+          <div class="action-tile" onclick="execSystemCmd('media_prev')">
+            <span class="tile-icon">⏮️</span>
+            <span class="tile-label">Prev</span>
+          </div>
+          <div class="action-tile" onclick="execSystemCmd('media_play_pause')">
+            <span class="tile-icon">⏯️</span>
+            <span class="tile-label">Play/Pause</span>
+          </div>
+          <div class="action-tile" onclick="execSystemCmd('media_next')">
+            <span class="tile-icon">⏭️</span>
+            <span class="tile-label">Next</span>
+          </div>
+          <div class="action-tile" onclick="execSystemCmd('volume_mute')">
+            <span class="tile-icon">🔇</span>
+            <span class="tile-label">Mute</span>
+          </div>
+        </div>
+        <div class="grid-2">
+          <button class="btn-hud" onclick="execSystemCmd('volume_down')">🔉 VOL -</button>
+          <button class="btn-hud" onclick="execSystemCmd('volume_up')">🔊 VOL +</button>
+        </div>
+      </div>
+
+      <!-- App Launchers Card -->
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">QUICK APP LAUNCHERS</h4>
+        <div class="grid-4">
+          <div class="action-tile" onclick="launchApp('chrome')">
+            <span class="tile-icon">🌐</span>
+            <span class="tile-label">Chrome</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('whatsapp')">
+            <span class="tile-icon">💬</span>
+            <span class="tile-label">WhatsApp</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('spotify')">
+            <span class="tile-icon">🎵</span>
+            <span class="tile-label">Spotify</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('vscode')">
+            <span class="tile-icon">💻</span>
+            <span class="tile-label">VS Code</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('explorer')">
+            <span class="tile-icon">📁</span>
+            <span class="tile-label">Files</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('notepad')">
+            <span class="tile-icon">📝</span>
+            <span class="tile-label">Notepad</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('calculator')">
+            <span class="tile-icon">🧮</span>
+            <span class="tile-label">Calc</span>
+          </div>
+          <div class="action-tile" onclick="launchApp('cmd')">
+            <span class="tile-icon">⚡</span>
+            <span class="tile-label">Terminal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Tab: Touchpad & Screen Mirror -->
+    <div class="tab-pane" id="pane-trackpad">
+      <!-- Mode Toggle -->
+      <div style="display: flex; gap: 8px; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 8px; border: 1px solid var(--border-hud);">
+        <button id="btn-mode-touchpad" class="btn-hud" style="flex: 1; padding: 8px; font-size: 0.75rem;" onclick="setTrackpadMode('touchpad')">🖱️ TOUCHPAD</button>
+        <button id="btn-mode-screen" class="btn-hud" style="flex: 1; padding: 8px; font-size: 0.75rem; background: transparent; border-color: transparent;" onclick="setTrackpadMode('screen')">📺 LIVE SCREEN</button>
+      </div>
+
+      <!-- Touchpad Mode Container -->
+      <div id="touchpad-wrapper" class="trackpad-container">
+        <div class="touchpad-surface" id="touchpad-surface">
+          <span class="touchpad-hint">DRAG TO MOVE • TAP FOR CLICK</span>
+        </div>
+        <div class="mouse-buttons">
+          <button class="mouse-btn" id="btn-left-click">LEFT CLICK</button>
+          <button class="mouse-btn" id="btn-right-click">RIGHT CLICK</button>
+        </div>
+        <div class="grid-3">
+          <button class="action-tile" onclick="sendKeyboardKey('win')">🪟 Win</button>
+          <button class="action-tile" onclick="sendKeyboardKey('escape')">Esc</button>
+          <button class="action-tile" onclick="promptKeyboardText()">⌨️ Type Text</button>
+        </div>
+      </div>
+
+      <!-- Screen Mirror Container -->
+      <div id="screen-wrapper" style="display: none; flex-direction: column; gap: 12px;">
+        <div class="screen-mirror-frame">
+          <img id="screen-img" class="screen-mirror-img" src="" alt="Live Screen Stream">
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <button class="btn-hud" style="width: auto; padding: 10px 16px;" onclick="refreshScreenSnapshot()">🔄 REFRESH SCREEN</button>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-muted); cursor: pointer;">
+            <input type="checkbox" id="chk-auto-screen"> Auto-stream (1 fps)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Tab: Hardware Stats & Telemetry -->
+    <div class="tab-pane" id="pane-stats">
+      <div class="card">
+        <div class="telemetry-row">
+          <span style="font-size: 0.8rem; color: var(--accent-cyan); font-family: var(--font-mono);">ACTIVE WINDOW</span>
+          <span id="stat-window" style="font-size: 0.85rem; font-weight: 600; color: #fff; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading...</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">PROCESSOR & MEMORY</h4>
+        
+        <div class="telemetry-row">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">CPU Utilization</span>
+          <span id="stat-cpu-val" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-cyan);">0%</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="stat-cpu-bar" class="gauge-bar-fill" style="width: 0%;"></div>
+        </div>
+
+        <div class="telemetry-row">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Memory (RAM)</span>
+          <span id="stat-ram-val" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-cyan);">0 GB / 0 GB</span>
+        </div>
+        <div class="gauge-bar-bg">
+          <div id="stat-ram-bar" class="gauge-bar-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 4px;">BATTERY LEVEL</div>
+          <div id="stat-battery-val" style="font-size: 1.4rem; font-weight: 700; color: var(--accent-green);">100%</div>
+          <div id="stat-battery-status" style="font-size: 0.7rem; color: var(--text-muted);">Plugged In</div>
+        </div>
+        <div class="card">
+          <div style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 4px;">FREE DISK SPACE</div>
+          <div id="stat-disk-val" style="font-size: 1.4rem; font-weight: 700; color: var(--accent-cyan);">0 GB</div>
+          <div style="font-size: 0.7rem; color: var(--text-muted);">Primary Drive (C:)</div>
+        </div>
+      </div>
+
+      <button class="btn-hud" onclick="fetchTelemetry(true)">⚡ REFRESH METRICS NOW</button>
+    </div>
+
+    <!-- 5. Tab: Sync & Files -->
+    <div class="tab-pane" id="pane-sync">
+      <!-- Clipboard Sync Card -->
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">CLIPBOARD SYNC</h4>
+        <div class="input-group">
+          <textarea id="clip-text" class="chat-input" style="height: 90px; border-radius: 8px; resize: none;" placeholder="Type text to send to PC clipboard..."></textarea>
+        </div>
+        <div class="grid-2">
+          <button class="btn-hud" onclick="getPCClipboard()">📋 PULL FROM PC</button>
+          <button class="btn-hud" onclick="sendPCClipboard()">📤 PUSH TO PC</button>
+        </div>
+      </div>
+
+      <!-- File Upload Card -->
+      <div class="card">
+        <h4 style="color: var(--accent-cyan); font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 12px;">SEND FILE TO PC DOWNLOADS</h4>
+        <input type="file" id="upload-file-input" style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.85rem; width: 100%;">
+        <button class="btn-hud" onclick="uploadSelectedFile()">⬆️ UPLOAD TO PC</button>
+        <p id="upload-status" style="font-size: 0.8rem; color: var(--accent-green); margin-top: 8px; display: none;"></p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation Bar (Visible once paired) -->
+  <nav class="bottom-nav" id="app-nav" style="display: none;">
+    <div class="nav-item active" data-tab="pane-chat">
+      <span class="nav-icon">🎙️</span>
+      <span>Assistant</span>
+    </div>
+    <div class="nav-item" data-tab="pane-controls">
+      <span class="nav-icon">🎮</span>
+      <span>Control</span>
+    </div>
+    <div class="nav-item" data-tab="pane-trackpad">
+      <span class="nav-icon">🖱️</span>
+      <span>Trackpad</span>
+    </div>
+    <div class="nav-item" data-tab="pane-stats">
+      <span class="nav-icon">📊</span>
+      <span>Telemetry</span>
+    </div>
+    <div class="nav-item" data-tab="pane-sync">
+      <span class="nav-icon">📁</span>
+      <span>Sync</span>
+    </div>
+  </nav>
+
+  <script src="/mobile/app.js"></script>
+</body>
+</html>

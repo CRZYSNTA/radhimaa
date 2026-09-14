@@ -1,0 +1,394 @@
+"""
+JARVIS V3.0 - Web & Landing Page Generator Tools
+Generates modern, responsive multi-section HTML5/CSS3/JavaScript websites,
+landing pages, and portfolios completely locally without external cloud builders.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import logging
+from pathlib import Path
+from typing import Optional, Dict, Any
+
+logger = logging.getLogger("JARVIS.Tools.WebBuilder")
+
+DEFAULT_WEBSITES_DIR = Path.home() / "Desktop" / "JARVIS" / "Websites"
+
+def build_website(
+    topic: str,
+    template_style: str = "modern",
+    output_dir: Optional[str] = None
+) -> str:
+    """
+    Builds a complete, modern responsive website locally.
+    Args:
+        topic: The subject, business, or personal portfolio theme (e.g., 'Cyberpunk Coffee Shop', 'AI Agency')
+        template_style: 'modern', 'dark_tech', 'minimal', or 'creative'
+        output_dir: Optional destination folder.
+    """
+    try:
+        clean_topic = re.sub(r"[^a-zA-Z0-9_-]+", "_", topic.strip()).strip("_") or "website"
+        if output_dir:
+            dest = Path(output_dir).expanduser()
+        else:
+            dest = DEFAULT_WEBSITES_DIR / clean_topic
+
+        dest.mkdir(parents=True, exist_ok=True)
+
+        primary_color = "#2563eb"
+        bg_color = "#0f172a" if template_style == "dark_tech" else "#ffffff"
+        card_bg = "#1e293b" if template_style == "dark_tech" else "#f8fafc"
+        text_color = "#f8fafc" if template_style == "dark_tech" else "#1e293b"
+        accent_color = "#06b6d4" if template_style == "dark_tech" else "#3b82f6"
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{topic} | Official Website</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="navbar">
+        <div class="logo">{topic}</div>
+        <nav>
+            <a href="#hero">Home</a>
+            <a href="#features">Features</a>
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
+        </nav>
+        <button class="cta-btn" onclick="alert('Welcome to {topic}!')">Get Started</button>
+    </header>
+
+    <section id="hero" class="hero-section">
+        <div class="hero-content">
+            <h1>Elevate Your Experience with <span class="highlight">{topic}</span></h1>
+            <p>Engineered for excellence, cutting-edge performance, and seamless user interaction.</p>
+            <div class="hero-actions">
+                <a href="#features" class="btn btn-primary">Explore Features</a>
+                <a href="#contact" class="btn btn-secondary">Get In Touch</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features-section">
+        <h2>Key Highlights</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="icon">🚀</div>
+                <h3>Lightning Fast</h3>
+                <p>Optimized architecture ensuring instantaneous response times and zero friction.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🛡️</div>
+                <h3>Secure & Reliable</h3>
+                <p>Built-in security protocols and fail-safe mechanisms safeguarding your operations.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">✨</div>
+                <h3>Intelligent Design</h3>
+                <p>Crafted with precision, responsive aesthetics, and intuitive user ergonomics.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="about-section">
+        <div class="about-content">
+            <h2>About {topic}</h2>
+            <p>We are dedicated to pioneering modern solutions. Our mission is to empower individuals and organizations through state-of-the-art technological advancement and elegant design.</p>
+        </div>
+    </section>
+
+    <section id="contact" class="contact-section">
+        <h2>Contact Us</h2>
+        <form class="contact-form" onsubmit="event.preventDefault(); document.getElementById('form-status').innerText = 'Thank you! Your message has been received.';">
+            <input type="text" placeholder="Your Name" required>
+            <input type="email" placeholder="Your Email" required>
+            <textarea placeholder="Your Message" rows="4" required></textarea>
+            <button type="submit" class="btn btn-primary">Send Message</button>
+            <p id="form-status" class="status-msg"></p>
+        </form>
+    </section>
+
+    <footer>
+        <p>&copy; 2026 {topic}. All rights reserved. Generated by JARVIS AI Assistant.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
+"""
+
+        css_content = f"""* {{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}}
+
+body {{
+    background-color: {bg_color};
+    color: {text_color};
+    line-height: 1.6;
+    scroll-behavior: smooth;
+}}
+
+.navbar {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 2.5rem;
+    position: sticky;
+    top: 0;
+    background: {bg_color}ee;
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid {card_bg};
+    z-index: 100;
+}}
+
+.logo {{
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: {accent_color};
+    letter-spacing: -0.5px;
+}}
+
+nav a {{
+    margin: 0 1rem;
+    text-decoration: none;
+    color: {text_color};
+    font-weight: 500;
+    transition: color 0.2s ease;
+}}
+
+nav a:hover {{
+    color: {accent_color};
+}}
+
+.cta-btn {{
+    padding: 0.6rem 1.4rem;
+    background: {primary_color};
+    color: #ffffff;
+    border: none;
+    border-radius: 9999px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}}
+
+.cta-btn:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px {primary_color}44;
+}}
+
+.hero-section {{
+    padding: 6rem 2rem;
+    text-align: center;
+    background: radial-gradient(circle at center, {accent_color}15 0%, transparent 70%);
+}}
+
+.hero-content {{
+    max-width: 800px;
+    margin: 0 auto;
+}}
+
+.hero-content h1 {{
+    font-size: 3rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 1.2rem;
+}}
+
+.highlight {{
+    color: {accent_color};
+}}
+
+.hero-content p {{
+    font-size: 1.2rem;
+    opacity: 0.85;
+    margin-bottom: 2rem;
+}}
+
+.hero-actions {{
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}}
+
+.btn {{
+    display: inline-block;
+    padding: 0.8rem 1.8rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}}
+
+.btn-primary {{
+    background: {primary_color};
+    color: #ffffff;
+    border: none;
+}}
+
+.btn-primary:hover {{
+    opacity: 0.9;
+    transform: translateY(-2px);
+}}
+
+.btn-secondary {{
+    background: {card_bg};
+    color: {text_color};
+    border: 1px solid {accent_color}44;
+}}
+
+.btn-secondary:hover {{
+    border-color: {accent_color};
+}}
+
+.features-section {{
+    padding: 5rem 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+    text-align: center;
+}}
+
+.features-section h2 {{
+    font-size: 2.2rem;
+    margin-bottom: 3rem;
+}}
+
+.features-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+}}
+
+.feature-card {{
+    background: {card_bg};
+    padding: 2.5rem 1.5rem;
+    border-radius: 12px;
+    border: 1px solid {card_bg};
+    transition: transform 0.2s, border-color 0.2s;
+}}
+
+.feature-card:hover {{
+    transform: translateY(-4px);
+    border-color: {accent_color}66;
+}}
+
+.feature-card .icon {{
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}}
+
+.feature-card h3 {{
+    margin-bottom: 0.8rem;
+    font-size: 1.3rem;
+}}
+
+.about-section {{
+    padding: 5rem 2rem;
+    background: {card_bg}55;
+    text-align: center;
+}}
+
+.about-content {{
+    max-width: 700px;
+    margin: 0 auto;
+}}
+
+.about-content h2 {{
+    font-size: 2.2rem;
+    margin-bottom: 1.5rem;
+}}
+
+.contact-section {{
+    padding: 5rem 2rem;
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}}
+
+.contact-section h2 {{
+    font-size: 2.2rem;
+    margin-bottom: 2rem;
+}}
+
+.contact-form {{
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}}
+
+.contact-form input, .contact-form textarea {{
+    padding: 0.9rem;
+    border-radius: 8px;
+    border: 1px solid {card_bg};
+    background: {card_bg};
+    color: {text_color};
+    font-size: 1rem;
+    outline: none;
+}}
+
+.contact-form input:focus, .contact-form textarea:focus {{
+    border-color: {accent_color};
+}}
+
+.status-msg {{
+    color: #10b981;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}}
+
+footer {{
+    text-align: center;
+    padding: 2.5rem;
+    border-top: 1px solid {card_bg};
+    font-size: 0.9rem;
+    opacity: 0.7;
+}}
+"""
+
+        js_content = """// JARVIS Generated Interactive Controller
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Website initialized successfully.');
+    // Simple smooth fade-in observer
+    const cards = document.querySelectorAll('.feature-card');
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, { threshold: 0.1 });
+
+    cards.forEach(card => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        card.style.transition = 'all 0.5s ease-out';
+        observer.observe(card);
+    });
+});
+"""
+
+        with open(dest / "index.html", "w", encoding="utf-8") as f:
+            f.write(html_content)
+        with open(dest / "style.css", "w", encoding="utf-8") as f:
+            f.write(css_content)
+        with open(dest / "script.js", "w", encoding="utf-8") as f:
+            f.write(js_content)
+
+        logger.info(f"[WebBuilder] Built website at {dest}")
+        return f"Website for '{topic}' successfully built at: {dest / 'index.html'}"
+
+    except Exception as e:
+        logger.error(f"[WebBuilder Error]: {e}")
+        return f"Failed to build website: {e}"

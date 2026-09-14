@@ -25,7 +25,7 @@ import uvicorn
 
 import server
 import tunnel_manager
-import clap_wake_engine
+from voice.clap_detection import DualTriggerEngine
 
 def create_jarvis_icon():
     width = 64
@@ -67,7 +67,7 @@ def start_services():
 
     # 2. Start Dual Trigger Voice ("Jarvis") & Sensitive Double-Clap Listener Thread
     try:
-        dual_engine = clap_wake_engine.DualTriggerEngine(clap_threshold=1200)
+        dual_engine = DualTriggerEngine()
         voice_thread = threading.Thread(target=dual_engine.start, daemon=True)
         voice_thread.start()
         print("[OK] Voice ('Jarvis') & Double-Clap Listener Active!")

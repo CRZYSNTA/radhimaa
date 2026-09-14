@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS V3.0 - Living Visualizer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background-color: #030712;
+      color: #f1f5f9;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px;
+    }
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .hud-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #38bdf8;
+      text-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-right {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .hud-link, .hud-btn {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      padding: 6px 14px;
+      color: #38bdf8;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hud-link:hover, .hud-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+      color: #ffffff;
+    }
+    .voice-selector-container {
+      position: relative;
+    }
+    .voice-dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: rgba(10, 16, 28, 0.97);
+      border: 1px solid #38bdf8;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.35);
+      backdrop-filter: blur(14px);
+      width: 290px;
+      z-index: 200;
+      overflow: hidden;
+    }
+    .dropdown-header {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      padding: 10px 14px 6px;
+      text-transform: uppercase;
+    }
+    .voice-option {
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .voice-option:hover {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+    }
+    .voice-option.active {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      font-weight: 700;
+    }
+    .dropdown-divider {
+      height: 1px;
+      background: rgba(56, 189, 248, 0.15);
+      margin: 4px 0;
+    }
+    .theme-selector {
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      backdrop-filter: blur(8px);
+    }
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .theme-btn.active, .theme-btn:hover {
+      color: #ffffff;
+      background: #0284c7;
+    }
+    .hud-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .status-badge {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .status-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #38bdf8;
+      letter-spacing: 1px;
+    }
+    .telemetry {
+      font-size: 11px;
+      color: #64748b;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="visualizerCanvas"></canvas>
+
+  <div class="hud-overlay">
+    <div class="hud-header">
+      <div style="display: flex; align-items: center; gap: 16px; pointer-events: auto;">
+        <div class="hud-title">
+          <span>⚡ JARVIS V3.0</span>
+        </div>
+        <a href="/" class="hud-link">🏠 Dashboard</a>
+        <a href="/app" class="hud-link">📱 Companion</a>
+      </div>
+      <div class="header-right">
+        <div class="theme-selector">
+          <button class="theme-btn active" onclick="setTheme('circuit')">Circuit Board</button>
+          <button class="theme-btn" onclick="setTheme('reactor')">Arc Reactor</button>
+          <button class="theme-btn" onclick="setTheme('matrix')">Matrix Rain</button>
+          <button class="theme-btn" onclick="setTheme('neural')">Neural Synapse</button>
+        </div>
+        <div class="voice-selector-container">
+          <button id="btn-voice-menu" class="hud-btn" onclick="toggleVoiceDropdown(event)">
+            🎙️ <span id="lbl-vis-voice">JARVIS (British)</span> ▾
+          </button>
+          <div id="voice-dropdown" class="voice-dropdown-menu">
+            <div class="dropdown-header">NEURAL STUDIO VOICE PACKS</div>
+            <div class="voice-option active" data-voice="en-GB-RyanNeural" onclick="selectVoice('en-GB-RyanNeural', 'JARVIS (British)')">🇬🇧 JARVIS (British Male)</div>
+            <div class="voice-option" data-voice="en-GB-SoniaNeural" onclick="selectVoice('en-GB-SoniaNeural', 'F.R.I.D.A.Y. (British)')">🇬🇧 F.R.I.D.A.Y. (British Female)</div>
+            <div class="voice-option" data-voice="en-US-GuyNeural" onclick="selectVoice('en-US-GuyNeural', 'Guy (US Tech)')">🇺🇸 Guy (US Male - Tech)</div>
+            <div class="voice-option" data-voice="en-US-JennyNeural" onclick="selectVoice('en-US-JennyNeural', 'Jenny (US Natural)')">🇺🇸 Jenny (US Female - Natural)</div>
+            <div class="voice-option" data-voice="en-US-ChristopherNeural" onclick="selectVoice('en-US-ChristopherNeural', 'Christopher (US)')">🇺🇸 Christopher (US Authoritative)</div>
+            <div class="voice-option" data-voice="en-AU-WilliamNeural" onclick="selectVoice('en-AU-WilliamNeural', 'William (Australian)')">🇦🇺 William (Australian Male)</div>
+            <div class="voice-option" data-voice="en-IN-PrabhatNeural" onclick="selectVoice('en-IN-PrabhatNeural', 'Prabhat (Indian)')">🇮🇳 Prabhat (Indian Male)</div>
+            <div class="voice-option" data-voice="en-IN-NeerjaNeural" onclick="selectVoice('en-IN-NeerjaNeural', 'Neerja (Indian)')">🇮🇳 Neerja (Indian Female)</div>
+            <div class="dropdown-divider"></div>
+            <div class="voice-option" data-voice="browser" onclick="selectVoice('browser', 'Browser System TTS')">📱 Local Browser TTS</div>
+            <div class="dropdown-divider"></div>
+            <div style="padding: 8px 12px; display: flex; gap: 8px;">
+              <button class="hud-btn" style="flex: 1; padding: 6px; font-size: 11px; justify-content: center;" onclick="testVoice(event)">▶️ Test Voice</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-footer">
+      <div class="status-badge">
+        <div id="statusText" class="status-text">◉ SYSTEM IDLE</div>
+        <div id="telemetryText" class="telemetry">NEURAL ENGINE ACTIVE // PORT 8000</div>
+      </div>
+      <div class="telemetry" id="clockText">00:00:00</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('visualizerCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    let currentTheme = 'circuit';
+    let currentState = 'IDLE'; // IDLE, LISTENING, THINKING, SPEAKING
+    let statePhase = 0.0;
+    let particles = [];
+    let circuitPaths = [];
+
+    const STATE_PALETTES = {
+      IDLE: { primary: '#38bdf8', glow: '#0284c7', core: '#e0f2fe' },
+      LISTENING: { primary: '#4ade80', glow: '#16a34a', core: '#dcfce7' },
+      THINKING: { primary: '#c084fc', glow: '#9333ea', core: '#f3e8ff' },
+      SPEAKING: { primary: '#fbbf24', glow: '#d97706', core: '#fef3c7' },
+      OBSERVING: { primary: '#06b6d4', glow: '#0891b2', core: '#cffafe' }
+    };
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      initCircuits();
+      initParticles();
+    }
+    window.addEventListener('resize', resize);
+
+    function setTheme(name) {
+      currentTheme = name;
+      document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    // ── 1. Living Circuit Board Engine ──
+    function initCircuits() {
+      circuitPaths = [];
+      const cx = width / 2;
+      const cy = height / 2;
+      const numLines = 36;
+
+      for (let i = 0; i < numLines; i++) {
+        const angle = (i / numLines) * Math.PI * 2;
+        const dist1 = 90 + Math.random() * 40;
+        const x1 = cx + Math.cos(angle) * dist1;
+        const y1 = cy + Math.sin(angle) * dist1;
+
+        // Dog-leg bend
+        const bendLen = 70 + Math.random() * 120;
+        const bendAngle = angle + (Math.random() > 0.5 ? 0.65 : -0.65);
+        const x2 = x1 + Math.cos(bendAngle) * bendLen;
+        const y2 = y1 + Math.sin(bendAngle) * bendLen;
+
+        const endLen = 140 + Math.random() * 200;
+        const x3 = x2 + Math.cos(angle) * endLen;
+        const y3 = y2 + Math.sin(angle) * endLen;
+
+        circuitPaths.push({
+          x1, y1, x2, y2, x3, y3,
+          packetPos: Math.random(),
+          speed: 0.004 + Math.random() * 0.008
+        });
+      }
+    }
+
+    function drawCircuitBoard(colors) {
+      const cx = width / 2;
+      const cy = height / 2;
+
+      // Draw etched circuit pathways
+      ctx.lineWidth = 1.8;
+      for (const p of circuitPaths) {
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.65)';
+        ctx.beginPath();
+        ctx.moveTo(p.x1, p.y1);
+        ctx.lineTo(p.x2, p.y2);
+        ctx.lineTo(p.x3, p.y3);
+        ctx.stroke();
+
+        // Animated neon data pulses traveling along lines
+        p.packetPos = (p.packetPos + p.speed) % 1.0;
+        let px, py;
+        if (p.packetPos < 0.5) {
+          const t = p.packetPos * 2;
+          px = p.x1 + (p.x2 - p.x1) * t;
+          py = p.y1 + (p.y2 - p.y1) * t;
+        } else {
+          const t = (p.packetPos - 0.5) * 2;
+          px = p.x2 + (p.x3 - p.x2) * t;
+          py = p.y2 + (p.y3 - p.y2) * t;
+        }
+
+        ctx.fillStyle = colors.primary;
+        ctx.shadowColor = colors.glow;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // Central Processor Chip
+      const chipSize = 130;
+      const x = cx - chipSize / 2;
+      const y = cy - chipSize / 2;
+
+      // Chip Pins
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 2;
+      for (let i = 10; i < chipSize; i += 12) {
+        // Top/Bottom pins
+        ctx.beginPath();
+        ctx.moveTo(x + i, y); ctx.lineTo(x + i, y - 10);
+        ctx.moveTo(x + i, y + chipSize); ctx.lineTo(x + i, y + chipSize + 10);
+        // Left/Right pins
+        ctx.moveTo(x, y + i); ctx.lineTo(x - 10, y + i);
+        ctx.moveTo(x + chipSize, y + i); ctx.lineTo(x + chipSize + 10, y + i);
+        ctx.stroke();
+      }
+
+      // Chip Base Body
+      ctx.fillStyle = '#0b0f19';
+      ctx.strokeStyle = colors.primary;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = colors.glow;
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.roundRect(x, y, chipSize, chipSize, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Chip Core Label
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 15px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('JARVIS', cx, cy - 8);
+
+      ctx.fillStyle = colors.primary;
+      ctx.font = '9px monospace';
+      ctx.fillText('V3.0 NEURAL CORE', cx, cy + 12);
+
+      // Core pulsating LED
+      const pulse = (Math.sin(statePhase) + 1) / 2;
+      ctx.fillStyle = colors.primary;
+      ctx.beginPath();
+      ctx.arc(cx, cy + 28, 3 + pulse * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── 2. Radial Arc Reactor ──
+    function drawArcReactor(colors) {
+      const cx = width / 2;
+      const cy = height / 2;
+      const pulse = Math.sin(statePhase) * 4;
+
+      ctx.strokeStyle = colors.primary;
+      ctx.shadowColor = colors.glow;
+      ctx.shadowBlur = 18;
+
+      for (let r = 50; r <= 160; r += 35) {
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + pulse, statePhase, statePhase + Math.PI * 1.5);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 5, -statePhase * 1.2, -statePhase * 1.2 + Math.PI * 0.8);
+        ctx.stroke();
+      }
+
+      // Center glowing reactor
+      ctx.fillStyle = colors.core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 24 + pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // ── 3. Matrix Digital Rain ──
+    const matrixChars = '01JARVISΩΨ∆∑√∂πµ';
+    let drops = [];
+    function initMatrix() {
+      const cols = Math.floor(width / 20);
+      drops = [];
+      for (let i = 0; i < cols; i++) drops[i] = Math.random() * -100;
+    }
+
+    function drawMatrixRain(colors) {
+      if (drops.length === 0) initMatrix();
+      ctx.fillStyle = 'rgba(3, 7, 18, 0.2)';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = colors.primary;
+      ctx.font = '14px monospace';
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = matrixChars[Math.floor(Math.random() * matrixChars.length)];
+        ctx.fillText(text, i * 20, drops[i] * 20);
+
+        if (drops[i] * 20 > height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    }
+
+    // ── 4. Neural Synapse ──
+    function initParticles() {
+      particles = [];
+      for (let i = 0; i < 45; i++) {
+        particles.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 1.2,
+          vy: (Math.random() - 0.5) * 1.2
+        });
+      }
+    }
+
+    function drawNeural(colors) {
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
+
+        ctx.fillStyle = colors.primary;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 130) {
+            ctx.strokeStyle = `rgba(56, 189, 248, ${1 - dist / 130})`;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    // ── Main Render Loop ──
+    function loop() {
+      statePhase += 0.04;
+
+      const colors = STATE_PALETTES[currentState] || STATE_PALETTES.IDLE;
+
+      if (currentTheme !== 'matrix') {
+        ctx.fillStyle = 'rgba(3, 7, 18, 0.4)';
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      if (currentTheme === 'circuit') {
+        drawCircuitBoard(colors);
+      } else if (currentTheme === 'reactor') {
+        drawArcReactor(colors);
+      } else if (currentTheme === 'matrix') {
+        drawMatrixRain(colors);
+      } else if (currentTheme === 'neural') {
+        drawNeural(colors);
+      }
+
+      // Update HUD Clock
+      const now = new Date();
+      document.getElementById('clockText').innerText = now.toLocaleTimeString();
+
+      requestAnimationFrame(loop);
+    }
+
+    // ── WebSocket Live Synchronization ──
+    function connectTelemetry() {
+      const host = window.location.host || 'localhost:8000';
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${host}/ws/chat`);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'state') {
+            currentState = data.state;
+            document.getElementById('statusText').innerText = `◉ ${currentState}`;
+          }
+        } catch (e) {}
+      };
+
+      ws.onclose = () => setTimeout(connectTelemetry, 3000);
+    }
+
+    // ── Voice Pack Selection & Real-Time TTS ──
+    let activeVoice = localStorage.getItem('jarvis_web_voice') || 'en-GB-RyanNeural';
+    let voiceLabel = localStorage.getItem('jarvis_web_voice_label') || 'JARVIS (British)';
+    let visAudio = new Audio();
+
+    const lblVoice = document.getElementById('lbl-vis-voice');
+    if (lblVoice) lblVoice.innerText = voiceLabel;
+
+    document.querySelectorAll('.voice-option').forEach(el => {
+      el.classList.toggle('active', el.getAttribute('data-voice') === activeVoice);
+    });
+
+    function toggleVoiceDropdown(e) {
+      if (e) e.stopPropagation();
+      const dd = document.getElementById('voice-dropdown');
+      if (dd) dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
+    }
+
+    window.addEventListener('click', (e) => {
+      const dd = document.getElementById('voice-dropdown');
+      if (dd && !e.target.closest('.voice-selector-container')) {
+        dd.style.display = 'none';
+      }
+    });
+
+    function selectVoice(voiceId, label) {
+      activeVoice = voiceId;
+      voiceLabel = label;
+      localStorage.setItem('jarvis_web_voice', activeVoice);
+      localStorage.setItem('jarvis_web_voice_label', voiceLabel);
+
+      const lbl = document.getElementById('lbl-vis-voice');
+      if (lbl) lbl.innerText = label;
+
+      document.querySelectorAll('.voice-option').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-voice') === voiceId);
+      });
+
+      if (voiceId !== 'browser') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token') || localStorage.getItem('jarvis_token') || '';
+        if (urlParams.get('token')) localStorage.setItem('jarvis_token', urlParams.get('token'));
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['x-jarvis-token'] = token;
+
+        fetch('/api/tts/set_voice', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ voice: voiceId })
+        }).catch(() => {});
+      }
+
+      const dd = document.getElementById('voice-dropdown');
+      if (dd) dd.style.display = 'none';
+    }
+
+    function speakText(text) {
+      if (!text || !text.trim()) return;
+
+      const previousState = currentState;
+      currentState = 'SPEAKING';
+      document.getElementById('statusText').innerText = '◉ SPEAKING';
+
+      if (activeVoice !== 'browser') {
+        fetch('/api/tts/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text, voice: activeVoice })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("TTS generation failed");
+          return res.blob();
+        })
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          visAudio.src = url;
+          visAudio.onended = () => {
+            currentState = previousState === 'SPEAKING' ? 'IDLE' : previousState;
+            document.getElementById('statusText').innerText = `◉ SYSTEM ${currentState}`;
+          };
+          visAudio.play();
+        })
+        .catch(() => {
+          fallbackBrowserTTS(text, previousState);
+        });
+      } else {
+        fallbackBrowserTTS(text, previousState);
+      }
+    }
+
+    function fallbackBrowserTTS(text, previousState) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onend = () => {
+        currentState = previousState === 'SPEAKING' ? 'IDLE' : previousState;
+        document.getElementById('statusText').innerText = `◉ SYSTEM ${currentState}`;
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function testVoice(e) {
+      if (e) e.stopPropagation();
+      speakText("Visualizer audio link established. All systems operational.");
+    }
+
+    resize();
+    loop();
+    connectTelemetry();
+  </script>
+</body>
+</html>

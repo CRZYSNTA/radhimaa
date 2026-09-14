@@ -1,0 +1,360 @@
+/* JARVIS V4 Holographic Interface Stylesheet */
+:root {
+  --jarvis-orange: #ff7a00;
+  --jarvis-hot: #ffe8a0;
+  --jarvis-amber: #ffb300;
+  --jarvis-cyan: #00ffff;
+  --jarvis-blue: #00b7ff;
+  --jarvis-bg: #030508;
+  --jarvis-dim: rgba(255, 138, 24, 0.25);
+  --jarvis-border: rgba(255, 122, 0, 0.4);
+  --font-mono: "SF Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--jarvis-bg);
+  font-family: var(--font-mono);
+  color: var(--jarvis-orange);
+  user-select: none;
+}
+
+#viewport-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+#webgl-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Vignette & scanline subtle cinematic overlay */
+.cinematic-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(circle at center, transparent 45%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+  background-size: 100% 4px;
+  opacity: 0.45;
+}
+
+/* 2D HUD OVERLAYS */
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Corner Framing Alignment Brackets */
+.bracket {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--jarvis-border);
+  opacity: 0.8;
+  transition: border-color 0.4s ease;
+}
+
+.bracket.top-left {
+  top: 24px;
+  left: 24px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.bracket.top-right {
+  top: 24px;
+  right: 24px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.bracket.bottom-left {
+  bottom: 24px;
+  left: 24px;
+  border-right: none;
+  border-top: none;
+}
+
+.bracket.bottom-right {
+  bottom: 24px;
+  right: 24px;
+  border-left: none;
+  border-top: none;
+}
+
+/* Crosshairs & Target Marks */
+.crosshair {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
+.crosshair::before, .crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--jarvis-orange);
+}
+.crosshair::before { top: 6px; left: 0; width: 14px; height: 1px; }
+.crosshair::after { top: 0; left: 6px; width: 1px; height: 14px; }
+
+.crosshair.tl { top: 20px; left: 80px; }
+.crosshair.tr { top: 20px; right: 80px; }
+.crosshair.bl { bottom: 20px; left: 80px; }
+.crosshair.br { bottom: 20px; right: 80px; }
+
+/* Top Header & Telemetry */
+.hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-name {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-shadow: 0 0 12px var(--jarvis-orange);
+}
+
+.system-tag {
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  padding: 2px 8px;
+  border: 1px solid var(--jarvis-border);
+  background: rgba(255, 122, 0, 0.08);
+  border-radius: 2px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: #ffb86c;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--jarvis-orange);
+  box-shadow: 0 0 8px var(--jarvis-orange);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1.0; transform: scale(1.2); }
+}
+
+/* Center Top Status & Horizontal Rule */
+.header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.top-line-bar {
+  width: 320px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--jarvis-orange), transparent);
+}
+
+.top-telemetry-text {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: rgba(255, 180, 100, 0.8);
+}
+
+/* Header Right - Telemetry Gauges */
+.header-right {
+  display: flex;
+  gap: 20px;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+}
+
+.gauge-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.gauge-label {
+  color: rgba(255, 200, 150, 0.6);
+  font-size: 9px;
+}
+
+.gauge-bar-wrap {
+  width: 80px;
+  height: 6px;
+  border: 1px solid var(--jarvis-border);
+  background: rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  width: 45%;
+  background: var(--jarvis-orange);
+  box-shadow: 0 0 6px var(--jarvis-orange);
+  transition: width 0.3s ease;
+}
+
+/* Bottom HUD Section */
+.hud-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+}
+
+.telemetry-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(255, 180, 100, 0.7);
+}
+
+.metric-line b {
+  color: var(--jarvis-orange);
+  font-weight: normal;
+}
+
+/* Center Waveform Oscilloscope */
+.footer-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#waveform-canvas {
+  width: 460px;
+  height: 70px;
+  display: block;
+}
+
+.subtitle-container {
+  min-height: 20px;
+  max-width: 600px;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: #fff2d9;
+  text-shadow: 0 0 10px var(--jarvis-orange);
+  transition: opacity 0.3s ease;
+}
+
+/* Gyroscope Radar Widget (Bottom-Right) */
+.footer-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.gyro-widget {
+  width: 90px;
+  height: 90px;
+  position: relative;
+}
+
+.gyro-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gyro-ring-outer {
+  transform-origin: center;
+  animation: gyro-spin 18s linear infinite;
+}
+
+.gyro-ring-inner {
+  transform-origin: center;
+  animation: gyro-spin-rev 12s linear infinite;
+}
+
+@keyframes gyro-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes gyro-spin-rev {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+/* Mode / State Pill */
+.state-badge {
+  padding: 4px 10px;
+  border: 1px solid var(--jarvis-border);
+  background: rgba(255, 122, 0, 0.12);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  border-radius: 2px;
+  text-align: center;
+  text-shadow: 0 0 8px var(--jarvis-orange);
+}
+
+/* Responsive Scaling */
+@media (max-width: 800px) {
+  #waveform-canvas { width: 300px; height: 50px; }
+  .header-right { display: none; }
+  .agent-name { font-size: 16px; }
+}

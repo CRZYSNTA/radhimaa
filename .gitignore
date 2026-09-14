@@ -1,8 +1,46 @@
-# Security & Privacy: Ignore secrets, database, binaries
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python & Caching
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local State & Telemetry
+.voice_state
+.voice_telemetry
+*.log
+launch_test.log
+
+# Databases & Backups
+*.db
+*.db-journal
+*.db-wal
+*.db.v3_backup
+jarvis_memory.db*
+
+# Secrets & Local Configs
+.env
+.env.local
+.env.production
+!.env.example
 config.json
-jarvis_memory.db
+.phone_config.json
+.tv_config.json
+secrets.json
+credentials.json
+
+# Binaries & Large Assets
 cloudflared.exe
 *.task
+build/
+dist/
+
+# Audio
 *.mp3
-__pycache__/
-.env
+*.wav
+temp_*.mp3

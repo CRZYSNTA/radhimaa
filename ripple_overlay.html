@@ -65,6 +65,116 @@
             70% { transform: scale(1.15); box-shadow: 0 0 0 12px rgba(56, 189, 248, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
         }
+
+        /* Top HUD Bar & Voice Pack Selector */
+        #top-bar {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 100;
+        }
+        .hud-link, .hud-btn {
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 20px;
+            padding: 7px 16px;
+            color: #38bdf8;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hud-link:hover, .hud-btn:hover {
+            background: rgba(56, 189, 248, 0.2);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+            color: #fff;
+        }
+        .voice-selector-container {
+            position: relative;
+        }
+        .voice-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: rgba(10, 16, 28, 0.97);
+            border: 1px solid #38bdf8;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.35);
+            backdrop-filter: blur(14px);
+            width: 290px;
+            z-index: 200;
+            overflow: hidden;
+        }
+        .dropdown-header {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #94a3b8;
+            padding: 10px 14px 6px;
+            text-transform: uppercase;
+        }
+        .voice-option {
+            padding: 8px 14px;
+            font-size: 12px;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .voice-option:hover {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+        }
+        .voice-option.active {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+            font-weight: 700;
+        }
+        .dropdown-divider {
+            height: 1px;
+            background: rgba(56, 189, 248, 0.15);
+            margin: 4px 0;
+        }
+
+        /* Bottom Command Bar */
+        #bottom-bar {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 90%;
+            max-width: 580px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 30px;
+            padding: 6px 14px;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);
+            z-index: 100;
+        }
+        #web-query-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #f1f5f9;
+            font-size: 14px;
+            padding: 6px 10px;
+        }
+        #web-query-input::placeholder {
+            color: #64748b;
+        }
     </style>
 </head>
 <body>
@@ -73,6 +183,40 @@
         <div id="hud-badge">
             <div class="status-dot" id="status-dot"></div>
             <div class="status-text" id="status-text">JARVIS Active (Click or Say "Jarvis")</div>
+        </div>
+
+        <!-- Top Navigation & Voice Pack Selector -->
+        <div id="top-bar">
+            <a href="/app" class="hud-link">📱 Companion</a>
+            <a href="/visualizer" class="hud-link">⚡ Visualizer</a>
+            <div class="voice-selector-container">
+                <button id="btn-voice-menu" class="hud-btn" onclick="toggleVoiceDropdown(event)">
+                    🎙️ <span id="lbl-web-voice">JARVIS (British)</span> ▾
+                </button>
+                <div id="voice-dropdown" class="voice-dropdown-menu">
+                    <div class="dropdown-header">NEURAL STUDIO VOICE PACKS</div>
+                    <div class="voice-option active" data-voice="en-GB-RyanNeural" onclick="selectWebVoice('en-GB-RyanNeural', 'JARVIS (British)')">🇬🇧 JARVIS (British Male)</div>
+                    <div class="voice-option" data-voice="en-GB-SoniaNeural" onclick="selectWebVoice('en-GB-SoniaNeural', 'F.R.I.D.A.Y. (British)')">🇬🇧 F.R.I.D.A.Y. (British Female)</div>
+                    <div class="voice-option" data-voice="en-US-GuyNeural" onclick="selectWebVoice('en-US-GuyNeural', 'Guy (US Tech)')">🇺🇸 Guy (US Male - Tech)</div>
+                    <div class="voice-option" data-voice="en-US-JennyNeural" onclick="selectWebVoice('en-US-JennyNeural', 'Jenny (US Natural)')">🇺🇸 Jenny (US Female - Natural)</div>
+                    <div class="voice-option" data-voice="en-US-ChristopherNeural" onclick="selectWebVoice('en-US-ChristopherNeural', 'Christopher (US)')">🇺🇸 Christopher (US Authoritative)</div>
+                    <div class="voice-option" data-voice="en-AU-WilliamNeural" onclick="selectWebVoice('en-AU-WilliamNeural', 'William (Australian)')">🇦🇺 William (Australian Male)</div>
+                    <div class="voice-option" data-voice="en-IN-PrabhatNeural" onclick="selectWebVoice('en-IN-PrabhatNeural', 'Prabhat (Indian)')">🇮🇳 Prabhat (Indian Male)</div>
+                    <div class="voice-option" data-voice="en-IN-NeerjaNeural" onclick="selectWebVoice('en-IN-NeerjaNeural', 'Neerja (Indian)')">🇮🇳 Neerja (Indian Female)</div>
+                    <div class="dropdown-divider"></div>
+                    <div class="voice-option" data-voice="browser" onclick="selectWebVoice('browser', 'Browser System TTS')">📱 Local Browser TTS</div>
+                    <div class="dropdown-divider"></div>
+                    <div style="padding: 8px 12px; display: flex; gap: 8px;">
+                        <button class="hud-btn" style="flex: 1; padding: 6px; font-size: 11px; justify-content: center;" onclick="testWebVoice(event)">▶️ Test Voice</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Query Bar -->
+        <div id="bottom-bar">
+            <input type="text" id="web-query-input" placeholder="Type a query or tap mic..." onkeydown="handleWebInputKey(event)">
+            <button class="hud-btn" style="border-radius: 50%; width: 34px; height: 34px; padding: 0; justify-content: center;" onclick="submitWebQuery()">➤</button>
         </div>
     </div>
 
@@ -224,23 +368,7 @@
                 const userQuery = event.results[0][0].transcript;
                 setStatus("🧠 Thinking...", "#c084fc", [192, 132, 252]); // Purple
 
-                fetch('/ask', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: userQuery })
-                })
-                .then(res => res.json())
-                .then(data => {
-                    setStatus("🔊 Speaking...", "#38bdf8", [56, 189, 248]);
-                    const utterance = new SpeechSynthesisUtterance(data.reply);
-                    utterance.onend = () => {
-                        setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
-                    };
-                    window.speechSynthesis.speak(utterance);
-                })
-                .catch(() => {
-                    setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
-                });
+                handleWebQuery(userQuery);
             };
 
             recognition.onerror = () => {
@@ -248,7 +376,143 @@
             };
         }
 
+        // ── Voice Pack & Audio Management ──
+        let webActiveVoice = localStorage.getItem('jarvis_web_voice') || 'en-GB-RyanNeural';
+        let webVoiceLabel = localStorage.getItem('jarvis_web_voice_label') || 'JARVIS (British)';
+        let ttsAudio = new Audio();
+
+        document.getElementById('lbl-web-voice').innerText = webVoiceLabel;
+        document.querySelectorAll('.voice-option').forEach(el => {
+            el.classList.toggle('active', el.getAttribute('data-voice') === webActiveVoice);
+        });
+
+        function toggleVoiceDropdown(e) {
+            if (e) e.stopPropagation();
+            const dd = document.getElementById('voice-dropdown');
+            dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
+        }
+
+        window.addEventListener('click', (e) => {
+            const dd = document.getElementById('voice-dropdown');
+            if (dd && !e.target.closest('.voice-selector-container')) {
+                dd.style.display = 'none';
+            }
+        });
+
+        function getAuthHeaders() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token') || localStorage.getItem('jarvis_token') || '';
+            if (urlParams.get('token')) {
+                localStorage.setItem('jarvis_token', urlParams.get('token'));
+            }
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers['x-jarvis-token'] = token;
+            return headers;
+        }
+
+        function selectWebVoice(voiceId, label) {
+            webActiveVoice = voiceId;
+            webVoiceLabel = label;
+            localStorage.setItem('jarvis_web_voice', webActiveVoice);
+            localStorage.setItem('jarvis_web_voice_label', webVoiceLabel);
+            document.getElementById('lbl-web-voice').innerText = label;
+
+            document.querySelectorAll('.voice-option').forEach(el => {
+                el.classList.toggle('active', el.getAttribute('data-voice') === voiceId);
+            });
+
+            // If neural voice, notify server of default
+            if (voiceId !== 'browser') {
+                fetch('/api/tts/set_voice', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ voice: voiceId })
+                }).catch(() => {});
+            }
+
+            const dd = document.getElementById('voice-dropdown');
+            if (dd) dd.style.display = 'none';
+        }
+
+        function speakWebResponse(text) {
+            if (!text || !text.trim()) return;
+
+            if (webActiveVoice !== 'browser') {
+                setStatus("🔊 Speaking...", "#38bdf8", [56, 189, 248]);
+                fetch('/api/tts/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text, voice: webActiveVoice })
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error("TTS generation failed");
+                    return res.blob();
+                })
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    ttsAudio.src = url;
+                    ttsAudio.onended = () => {
+                        setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+                    };
+                    ttsAudio.play();
+                })
+                .catch(() => {
+                    fallbackBrowserTTS(text);
+                });
+            } else {
+                fallbackBrowserTTS(text);
+            }
+        }
+
+        function fallbackBrowserTTS(text) {
+            setStatus("🔊 Speaking...", "#38bdf8", [56, 189, 248]);
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.onend = () => {
+                setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+            };
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function testWebVoice(e) {
+            if (e) e.stopPropagation();
+            speakWebResponse("Online and at your service, sir.");
+        }
+
+        function handleWebQuery(query) {
+            if (!query || !query.trim()) return;
+            setStatus("🧠 Thinking...", "#c084fc", [192, 132, 252]);
+
+            fetch('/ask', {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ text: query })
+            })
+            .then(res => res.json())
+            .then(data => {
+                speakWebResponse(data.reply);
+            })
+            .catch(() => {
+                setStatus("JARVIS Active (Click or Say 'Jarvis')", "#38bdf8", [56, 189, 248]);
+            });
+        }
+
+        function handleWebInputKey(e) {
+            if (e.key === 'Enter') {
+                submitWebQuery();
+            }
+        }
+
+        function submitWebQuery() {
+            const input = document.getElementById('web-query-input');
+            const val = input.value.trim();
+            if (val) {
+                input.value = '';
+                handleWebQuery(val);
+            }
+        }
+
         window.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('#top-bar') || e.target.closest('#bottom-bar')) return;
             emit(e.clientX, e.clientY);
             if (recognition) {
                 try { recognition.start(); } catch(err) {}

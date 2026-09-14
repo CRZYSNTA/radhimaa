@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <base href="/interface/">
+    <title>JARVIS V4 — Holographic AI Operating Interface</title>
+    <link rel="stylesheet" href="css/jarvis.css">
+</head>
+<body>
+    <!-- 3D Hologram WebGL Viewport -->
+    <div id="webgl-container"></div>
+
+    <!-- 2D Canvas Fallback Viewport (activated if WebGL is unavailable) -->
+    <div id="fallback-container">
+        <div style="color: var(--jarvis-primary); font-size: 13px; font-weight: bold; letter-spacing: 2px;">JARVIS 2D CORE</div>
+        <div style="color: #888; font-size: 9px; margin-top: 6px;">COMPATIBILITY MODE</div>
+    </div>
+
+    <!-- Futuristic HUD Layer -->
+    <div class="hud-layer">
+        <!-- Corner Framing Brackets (Cinematic AI Camera Alignment) -->
+        <div class="hud-bracket bracket-tl"></div>
+        <div class="hud-bracket bracket-tr"></div>
+        <div class="hud-bracket bracket-bl"></div>
+        <div class="hud-bracket bracket-br"></div>
+        <div class="hud-scan-line"></div>
+
+        <!-- Top Telemetry Header -->
+        <header class="hud-header">
+            <div class="brand-section">
+                <div class="brand-title">J.A.R.V.I.S. // V4</div>
+                <div class="brand-subtitle">NEURAL CORE OPERATING SYSTEM</div>
+            </div>
+
+            <div class="telemetry-center">
+                <div id="hud-state-badge" class="state-badge">BOOTING</div>
+                <div id="hud-state-detail" class="state-detail">INITIALIZING QUANTUM CORE...</div>
+            </div>
+
+            <div class="system-stats">
+                <div class="stat-item">
+                    <div class="stat-label">PROCESSOR</div>
+                    <div id="hud-cpu" class="stat-val">0%</div>
+                    <div class="stat-bar"><div id="hud-cpu-bar" class="stat-bar-fill"></div></div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="stat-label">MEMORY</div>
+                    <div id="hud-ram" class="stat-val">0%</div>
+                    <div class="stat-bar"><div id="hud-ram-bar" class="stat-bar-fill"></div></div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="stat-label">DATA BRIDGE</div>
+                    <div id="hud-ws-status" class="status-tag ok">LINK: INITIALIZING</div>
+                </div>
+
+                <div class="stat-item">
+                    <div class="stat-label">CORE FACE</div>
+                    <select id="face-selector" onchange="if(this.value!=='jarvis-v4') window.location.href=this.value;" style="background: rgba(0,20,30,0.85); color: var(--jarvis-primary, #00d2ff); border: 1px solid var(--jarvis-primary, #00d2ff); font-family: monospace; font-size: 10px; border-radius: 3px; padding: 2px 4px; outline: none; cursor: pointer;">
+                        <option value="jarvis-v4" selected>JARVIS V4 (Sphere)</option>
+                        <option value="faces/neural/index.html">NEURAL (Brain)</option>
+                        <option value="faces/radial/index.html">RADIAL (Pulse)</option>
+                        <option value="faces/rain/index.html">RAIN (Matrix)</option>
+                        <option value="faces/board/index.html">BOARD (Terminal)</option>
+                        <option value="visualizer.html">GALLERY (All Faces)</option>
+                    </select>
+                </div>
+
+                <div class="stat-item" style="cursor: pointer;" id="hud-diag-trigger" title="Click to view live diagnostics">
+                    <div class="stat-label">SYSTEM HEALTH</div>
+                    <div id="hud-diag-badge" class="status-tag ok">DIAGNOSTICS ⚡</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Command Execution Banner -->
+        <div id="hud-command-box" class="hud-floating-panel">
+            <div class="command-label">COMMAND INGRESS</div>
+            <div id="hud-command-text">EXECUTE TOOL</div>
+        </div>
+
+        <!-- Chat Dock Container (Glassmorphic Holographic Interface) -->
+        <div id="hud-chat-dock" class="hud-chat-dock">
+            <div class="chat-dock-header">
+                <div class="chat-dock-title">
+                    <span class="pulse-dot"></span>
+                    <span>NEURAL OPERATOR // COMMAND STREAM</span>
+                </div>
+                <button id="chat-toggle-btn" class="chat-dock-btn" title="Toggle Dock Size">▼ DOCK</button>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-bubble system-bubble">
+                    <div class="bubble-sender">SYSTEM INTEL</div>
+                    <div class="bubble-content">Holographic Neural Bridge linked to Gemini Cloud Reasoning & Local Tools. Hold <strong>[HOME KEY]</strong> to speak or type commands below.</div>
+                </div>
+            </div>
+            <div class="chat-input-bar">
+                <input type="text" id="chat-input" placeholder="Ask Jarvis/Leo or enter command... (Hold [Home] for voice)" autocomplete="off" />
+                <button id="chat-send-btn" class="chat-send-btn">TRANSMIT</button>
+            </div>
+        </div>
+
+        <!-- Action Confirmation Modal (CONFIRM Tier Authorization Gate) -->
+        <div id="hud-confirm-modal" class="hud-modal-backdrop" style="display: none;">
+            <div class="hud-modal-card">
+                <div class="hud-modal-header">
+                    <div class="warning-icon">⚠️</div>
+                    <div class="modal-title">ELEVATED ACTION CONFIRMATION</div>
+                </div>
+                <div class="hud-modal-body">
+                    <p class="modal-notice">The neural core requests authorization to execute a sensitive operation on your system:</p>
+                    <div class="modal-tool-badge">
+                        <span class="badge-label">TARGET TOOL:</span>
+                        <span id="confirm-tool-name" class="badge-value">propose_note_update</span>
+                    </div>
+                    <div class="modal-payload-box">
+                        <div class="payload-label">ARGUMENT MANIFEST:</div>
+                        <pre id="confirm-tool-args" class="payload-pre">{}</pre>
+                    </div>
+                    <p class="modal-security-rule">Security Policy: Models cannot authorize themselves. Your explicit consent is required to commit changes to storage or hardware.</p>
+                </div>
+                <div class="hud-modal-footer">
+                    <button id="confirm-reject-btn" class="modal-btn btn-reject">DENY & ABORT</button>
+                    <button id="confirm-approve-btn" class="modal-btn btn-approve">AUTHORIZE & EXECUTE</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Diagnostics Modal -->
+        <div id="hud-diag-modal" class="hud-modal-backdrop" style="display: none;">
+            <div class="hud-modal-card" style="max-width: 640px; width: 90%;">
+                <div class="hud-modal-header">
+                    <div class="warning-icon" style="color: #38bdf8;">⚡</div>
+                    <div class="modal-title">SYSTEM DIAGNOSTICS & TELEMETRY</div>
+                    <button id="diag-close-btn" class="chat-dock-btn" style="margin-left: auto; cursor: pointer;">✕</button>
+                </div>
+                <div class="hud-modal-body" style="max-height: 420px; overflow-y: auto;">
+                    <div id="diag-content-box" style="font-family: monospace; font-size: 13px; line-height: 1.6;">
+                        <p>Loading live diagnostics...</p>
+                    </div>
+                </div>
+                <div class="hud-modal-footer">
+                    <button id="diag-refresh-btn" class="modal-btn btn-approve" style="cursor: pointer;">REFRESH TELEMETRY</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Push-to-Talk / Mic HUD Indicator Pill -->
+        <div id="hud-mic-pill" class="hud-mic-pill">
+            <button id="mic-toggle-btn" class="mic-icon-btn" title="Microphone Status">🎙️</button>
+            <div class="mic-info">
+                <div class="mic-keys-hint"><span class="key-badge">HOME KEY</span> PUSH-TO-TALK</div>
+                <div class="mic-status-row">
+                    <span id="mic-state-label" class="mic-status-badge state-idle">IDLE</span>
+                    <div class="mic-rms-bar"><div id="mic-rms-fill" class="mic-rms-fill"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Smart TV Real-Time Banner -->
+        <div id="hud-tv-banner" class="hud-floating-panel">
+            <div id="hud-tv-action">TCL ANDROID TV CONNECTED</div>
+            <div id="hud-tv-detail">POWER: ON • APP: YOUTUBE</div>
+        </div>
+
+        <!-- Assistant Vocal Subtitle Banner -->
+        <div id="hud-assistant-box" class="hud-floating-panel">
+            <div id="hud-assistant-text">Good evening, sir. All neural and hardware systems are operational.</div>
+        </div>
+
+        <!-- Audio Waveform Oscilloscope Canvas -->
+        <div class="waveform-container">
+            <canvas id="waveform-canvas"></canvas>
+        </div>
+
+        <!-- Footer Telemetry -->
+        <div class="hud-footer-left">
+            <span id="hud-clock">00:00:00</span>
+            <span>•</span>
+            <span id="hud-fps">60 FPS</span>
+            <span>•</span>
+            <span>LEO VAULT SYNC: ACTIVE</span>
+        </div>
+
+        <!-- Bottom-Right Rotating Gyroscope Dial (Reference Image Feature) -->
+        <div class="hud-gyro-widget">
+            <svg id="hud-gyro-dial" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="46" fill="none" stroke="var(--jarvis-primary)" stroke-width="1.5" stroke-dasharray="4, 4" opacity="0.6"/>
+                <circle cx="50" cy="50" r="38" fill="none" stroke="var(--jarvis-primary)" stroke-width="1" opacity="0.4"/>
+                <circle cx="50" cy="50" r="28" fill="none" stroke="var(--jarvis-primary)" stroke-width="2" stroke-dasharray="14, 8" opacity="0.8"/>
+                <circle cx="50" cy="50" r="16" fill="none" stroke="var(--jarvis-primary)" stroke-width="1.5" opacity="0.7"/>
+                <line x1="50" y1="2" x2="50" y2="12" stroke="var(--jarvis-primary)" stroke-width="2"/>
+                <line x1="50" y1="88" x2="50" y2="98" stroke="var(--jarvis-primary)" stroke-width="2"/>
+                <line x1="2" y1="50" x2="12" y2="50" stroke="var(--jarvis-primary)" stroke-width="2"/>
+                <line x1="88" y1="50" x2="98" y2="50" stroke="var(--jarvis-primary)" stroke-width="2"/>
+                <polygon points="50,22 46,30 54,30" fill="var(--jarvis-primary)"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 1. Offline Bundled Three.js with CDN Fallback -->
+    <script src="js/lib/three.min.js"></script>
+    <script>
+        if (typeof THREE === "undefined") {
+            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+        }
+    </script>
+
+    <!-- 2. Subsystem Scripts in Dependency Order -->
+    <script src="js/themes.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/websocket.js"></script>
+    <script src="js/scene.js"></script>
+    <script src="js/core.js"></script>
+    <script src="js/sphere.js"></script>
+    <script src="js/particles.js"></script>
+    <script src="js/rings.js"></script>
+    <script src="js/arcs.js"></script>
+    <script src="js/waveform.js"></script>
+    <script src="js/hud.js"></script>
+    <script src="js/chat_dock.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

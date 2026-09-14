@@ -1,49 +1,60 @@
 """
 =============================================================================
-JARVIS 24/7 Full Backend Cloud Server Engine (Database Clean Parsing & Aliases)
+JARVIS 24/7 Full Backend Cloud Server Engine (Hardened & Secure V3.0)
 =============================================================================
-Fixes Applied:
- - Cleans legacy 'undefined' entries from database table
- - Adds route aliases for /history and /api/history
- - Passes X-JARVIS-Token in web console automatically
-
-Author: Built for beginners (B.Tech CS background)
+Security & Architecture Hardening:
+ - [P0] Remote auth FAILS CLOSED: Rejects remote requests if JARVIS_AUTH_TOKEN is not configured
+ - [P0] Removed client-spoofed Referer bypass ("onrender.com")
+ - [P0] Authenticated WebSockets (/ws/chat) with token validation and 1008 rejection
+ - [P1] Removed hard-coded default secret from client-delivered HTML/JS dashboard
+ - [P1] Added message size validation (max 4000 characters)
+ - [P1] In-memory sliding-window rate limiter per client IP (30 req/min)
 =============================================================================
 """
 
 import os
+import time
 import json
 import sqlite3
 import requests
-from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from collections import defaultdict
+from typing import Optional, List, Dict
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "jarvis_memory.db")
+# On Vercel / serverless platforms, only /tmp is writable
+if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    DB_PATH = "/tmp/jarvis_memory.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), "jarvis_memory.db")
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS conversation_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            sender TEXT NOT NULL,
-            message TEXT NOT NULL
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_facts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            fact_key TEXT UNIQUE NOT NULL,
-            fact_value TEXT NOT NULL
-        )
-    ''')
-    # Clean up legacy 'undefined' database records
-    cursor.execute("DELETE FROM conversation_history WHERE message = 'undefined' OR message IS NULL")
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                sender TEXT NOT NULL,
+                message TEXT NOT NULL
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fact_key TEXT UNIQUE NOT NULL,
+                fact_value TEXT NOT NULL
+            )
+        ''')
+        cursor.execute("DELETE FROM conversation_history WHERE message = 'undefined' OR message IS NULL")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[DB Init Error]: {e}")
 
 def save_conversation(sender: str, message: str):
     msg_str = str(message).strip() if message else ""
@@ -72,7 +83,12 @@ def get_recent_conversations(limit: int = 10):
 
 init_db()
 
-app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="2.9")
+app = FastAPI(title="JARVIS 24/7 Full Backend Cloud Server", version="3.0")
+
+# Mount modern V4 holographic web interface
+interface_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "interface")
+if os.path.exists(interface_dir):
+    app.mount("/interface", StaticFiles(directory=interface_dir), name="interface")
 
 app.add_middleware(
     CORSMiddleware,
@@ -83,16 +99,41 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-AUTH_TOKEN = os.environ.get("JARVIS_AUTH_TOKEN", "")
 
+# Security Parameters
+MAX_MESSAGE_LENGTH = 4000
+RATE_LIMIT_REQUESTS = 30
+RATE_LIMIT_WINDOW = 60  # seconds
+_client_request_timestamps = defaultdict(list)
+
+def get_auth_token() -> str:
+    """Retrieve expected token from environment without public fallbacks."""
+    return os.environ.get("JARVIS_AUTH_TOKEN") or os.environ.get("AUTH_TOKEN") or ""
+
+def check_rate_limit(client_id: str):
+    """Sliding-window rate limiter enforcing max requests per minute."""
+    now = time.time()
+    timestamps = _client_request_timestamps[client_id]
+    _client_request_timestamps[client_id] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
+    if len(_client_request_timestamps[client_id]) >= RATE_LIMIT_REQUESTS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too Many Requests: Rate limit of {RATE_LIMIT_REQUESTS} requests per minute exceeded."
+        )
+    _client_request_timestamps[client_id].append(now)
 
 class UnifiedQuery(BaseModel):
-    text: str = None
-    message: str = None
+    text: Optional[str] = None
+    message: Optional[str] = None
 
     def get_query(self) -> str:
-        return (self.text or self.message or "").strip()
-
+        q = (self.text or self.message or "").strip()
+        if len(q) > MAX_MESSAGE_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bad Request: Message length ({len(q)}) exceeds maximum limit of {MAX_MESSAGE_LENGTH} characters."
+            )
+        return q
 
 def fetch_gemini_ai_response(user_text: str) -> str:
     if not user_text:
@@ -115,7 +156,7 @@ def fetch_gemini_ai_response(user_text: str) -> str:
 
     key = GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
     if key:
-        models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"]
+        models = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.6-flash"]
         system_prompt = "You are JARVIS, a highly intelligent, polite, and concise AI assistant inspired by Iron Man. Keep answers brief (1 to 2 sentences max)."
         for model in models:
             try:
@@ -136,7 +177,6 @@ def fetch_gemini_ai_response(user_text: str) -> str:
 
     return f"I received your query: '{user_text}'. Brain active, sir!"
 
-
 def process_query_with_memory(user_text: str) -> str:
     clean_text = user_text if user_text else "hello"
     save_conversation("User", clean_text)
@@ -144,26 +184,50 @@ def process_query_with_memory(user_text: str) -> str:
     save_conversation("JARVIS", reply)
     return reply
 
-
 def verify_auth(request: Request, x_jarvis_token: str = Header(None)):
-    client_ip = request.client.host if request.client else ""
-    referer = request.headers.get("referer", "")
-    
-    if client_ip in ["127.0.0.1", "localhost", "::1"] or "onrender.com" in referer:
+    """
+    Strict security verification:
+    - Loopback callers (localhost) are allowed for local development.
+    - Remote callers MUST provide a valid token matching JARVIS_AUTH_TOKEN.
+    - Fails closed: If no token is configured on the server, remote requests return 403 Forbidden.
+    - Referer headers are NOT trusted for authentication.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if client_ip in ["127.0.0.1", "localhost", "::1"]:
+        check_rate_limit(client_ip)
         return
 
-    token_to_check = AUTH_TOKEN or os.environ.get("JARVIS_AUTH_TOKEN")
-    if token_to_check and x_jarvis_token != token_to_check:
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid JARVIS Security Token")
+    expected_token = get_auth_token()
+    if not expected_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Remote access denied. JARVIS_AUTH_TOKEN is not configured on the server."
+        )
 
+    provided = x_jarvis_token
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        provided = auth_header[7:].strip()
+
+    if not provided or provided != expected_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized: Missing or invalid JARVIS Security Token."
+        )
+
+    check_rate_limit(client_ip)
 
 @app.get("/health")
 def health_check():
-    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "2.9"}
-
+    return {"status": "online", "system": "JARVIS 24/7 Cloud Server", "version": "3.0"}
 
 @app.get("/")
 def get_web_dashboard():
+    # If modern V4 interface exists, redirect to it
+    interface_index = os.path.join(os.path.dirname(os.path.dirname(__file__)), "interface", "index.html")
+    if os.path.exists(interface_index):
+        return RedirectResponse(url="/interface/index.html")
+
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -175,20 +239,28 @@ def get_web_dashboard():
         <meta http-equiv="Expires" content="0">
         <style>
             body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; display: flex; justify-content: center; }
-            .card { width: 100%; max-width: 550px; background: #1e293b; border: 1px solid #38bdf8; border-radius: 12px; padding: 22px; box-shadow: 0 0 30px rgba(56, 189, 248, 0.35); }
+            .card { width: 100%; max-width: 560px; background: #1e293b; border: 1px solid #38bdf8; border-radius: 12px; padding: 22px; box-shadow: 0 0 30px rgba(56, 189, 248, 0.35); }
             h1 { color: #38bdf8; text-align: center; margin-top: 0; font-size: 22px; letter-spacing: 1px; }
-            #box { height: 340px; overflow-y: auto; background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 14px; border: 1px solid #334155; }
+            .auth-bar { display: flex; gap: 8px; margin-bottom: 12px; background: #0f172a; padding: 8px; border-radius: 8px; border: 1px solid #334155; }
+            .auth-bar input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #475569; background: #1e293b; color: white; font-size: 13px; }
+            .auth-bar button { padding: 8px 14px; border-radius: 6px; border: none; background: #38bdf8; color: #0f172a; font-weight: bold; cursor: pointer; font-size: 13px; }
+            #box { height: 320px; overflow-y: auto; background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 14px; border: 1px solid #334155; }
             .msg { margin: 8px 0; padding: 10px 14px; border-radius: 8px; font-size: 14px; line-height: 1.4; }
             .user { background: #0284c7; color: white; margin-left: 20%; }
             .jarvis { background: #334155; color: #38bdf8; border-left: 4px solid #38bdf8; margin-right: 15%; }
+            .err { background: #7f1d1d; color: #fca5a5; border-left: 4px solid #ef4444; }
             .row { display: flex; gap: 8px; }
-            input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 14px; }
-            button { padding: 12px 20px; border-radius: 8px; border: none; background: #38bdf8; color: #0f172a; font-weight: bold; cursor: pointer; font-size: 14px; }
+            .row input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 14px; }
+            .row button { padding: 12px 20px; border-radius: 8px; border: none; background: #38bdf8; color: #0f172a; font-weight: bold; cursor: pointer; font-size: 14px; }
         </style>
     </head>
     <body>
         <div class="card">
             <h1>🤖 JARVIS 24/7 Cloud Console</h1>
+            <div class="auth-bar">
+                <input type="password" id="authToken" placeholder="Enter Access Token...">
+                <button onclick="saveToken()">Set Token</button>
+            </div>
             <div id="box"></div>
             <div class="row">
                 <input type="text" id="inp" placeholder="Type a message or ask a question..." onkeydown="if(event.key==='Enter') send()">
@@ -196,11 +268,31 @@ def get_web_dashboard():
             </div>
         </div>
         <script>
+            function getToken() {
+                return sessionStorage.getItem('jarvis_token') || document.getElementById('authToken').value.trim();
+            }
+            function saveToken() {
+                const val = document.getElementById('authToken').value.trim();
+                sessionStorage.setItem('jarvis_token', val);
+                append('Security token updated in local session.', 'jarvis');
+                loadHistory();
+            }
+            window.onload = function() {
+                const saved = sessionStorage.getItem('jarvis_token');
+                if (saved) document.getElementById('authToken').value = saved;
+                loadHistory();
+            };
+
             async function loadHistory() {
+                const token = getToken();
                 try {
                     const res = await fetch('/api/history?limit=10&v=' + Date.now(), {
-                        headers: { 'X-JARVIS-Token': 'jarvis_secret_key_777' }
+                        headers: token ? { 'X-JARVIS-Token': token } : {}
                     });
+                    if (res.status === 401 || res.status === 403) {
+                        append('Authentication required. Please enter your JARVIS Access Token above.', 'err');
+                        return;
+                    }
                     if (res.ok) {
                         const data = await res.json();
                         (data.history || []).forEach(item => {
@@ -213,28 +305,35 @@ def get_web_dashboard():
                     }
                 } catch(e) {}
             }
-            loadHistory();
 
             async function send() {
                 const inp = document.getElementById('inp');
                 const text = inp.value.trim();
                 if(!text) return;
+                const token = getToken();
                 append('You: ' + text, 'user');
                 inp.value = '';
                 try {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['X-JARVIS-Token'] = token;
                     const res = await fetch('/ask', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-JARVIS-Token': 'jarvis_secret_key_777'
-                        },
+                        headers: headers,
                         body: JSON.stringify({text: text, message: text})
                     });
+                    if (res.status === 401 || res.status === 403) {
+                        append('Access Denied: Please provide a valid JARVIS security token.', 'err');
+                        return;
+                    }
+                    if (res.status === 429) {
+                        append('Rate limit exceeded. Please wait a moment before sending more requests.', 'err');
+                        return;
+                    }
                     const data = await res.json();
                     const reply = data.reply || data.response || data.detail || 'Brain active, sir!';
                     append('JARVIS: ' + reply, 'jarvis');
                 } catch(e) {
-                    append('JARVIS: Connection Error', 'jarvis');
+                    append('JARVIS: Connection Error', 'err');
                 }
             }
             function append(m, c) {
@@ -258,13 +357,11 @@ def get_web_dashboard():
         }
     )
 
-
 @app.post("/ask")
 def ask_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str = Header(None)):
     verify_auth(request, x_jarvis_token)
     reply = process_query_with_memory(payload.get_query())
     return {"reply": reply, "response": reply}
-
 
 @app.post("/api/chat")
 def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str = Header(None)):
@@ -272,25 +369,62 @@ def chat_endpoint(payload: UnifiedQuery, request: Request, x_jarvis_token: str =
     reply = process_query_with_memory(payload.get_query())
     return {"reply": reply, "response": reply}
 
-
 @app.get("/api/history")
 @app.get("/history")
 def history_endpoint(request: Request, limit: int = 10, x_jarvis_token: str = Header(None)):
     verify_auth(request, x_jarvis_token)
     return {"history": get_recent_conversations(limit)}
 
-
 @app.websocket("/ws/chat")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None)
+):
+    """
+    Secure WebSocket connection.
+    Authenticates before accepting: requires valid token via query parameter or headers.
+    Enforces message size limits and rate limiting.
+    """
+    client_ip = websocket.client.host if websocket.client else "unknown"
+    expected_token = get_auth_token()
+
+    # Resolve token from query param, X-JARVIS-Token header, or Authorization header
+    provided = token
+    if not provided:
+        provided = websocket.headers.get("x-jarvis-token")
+    if not provided:
+        auth_hdr = websocket.headers.get("authorization", "")
+        if auth_hdr.lower().startswith("bearer "):
+            provided = auth_hdr[7:].strip()
+
+    is_local = client_ip in ["127.0.0.1", "localhost", "::1"]
+
+    if not is_local:
+        if not expected_token or provided != expected_token:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    elif expected_token and provided and provided != expected_token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()
+            if len(data) > MAX_MESSAGE_LENGTH:
+                await websocket.send_text(f"Error: Message exceeds {MAX_MESSAGE_LENGTH} characters limit.")
+                continue
+
+            try:
+                check_rate_limit(client_ip)
+            except HTTPException as e:
+                await websocket.send_text(f"Rate Limit Error: {e.detail}")
+                continue
+
             reply = process_query_with_memory(data)
             await websocket.send_text(reply)
     except WebSocketDisconnect:
         pass
-
 
 if __name__ == "__main__":
     import uvicorn
